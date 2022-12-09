@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-jose/go-jose/v3"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options/provideropts"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/sessions"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/requests"
 )
@@ -81,7 +81,7 @@ var (
 )
 
 // NewLoginGovProvider initiates a new LoginGovProvider
-func NewLoginGovProvider(p *ProviderData, opts options.LoginGovOptions) (*LoginGovProvider, error) {
+func NewLoginGovProvider(p *ProviderData, opts provideropts.LoginGovOptions) (*LoginGovProvider, error) {
 	p.setProviderDefaults(providerDefaults{
 		name:        loginGovProviderName,
 		loginURL:    loginGovDefaultLoginURL,
@@ -101,7 +101,7 @@ func NewLoginGovProvider(p *ProviderData, opts options.LoginGovOptions) (*LoginG
 	return provider, nil
 }
 
-func (p *LoginGovProvider) configure(opts options.LoginGovOptions) error {
+func (p *LoginGovProvider) configure(opts provideropts.LoginGovOptions) error {
 	pubJWKURL, err := url.Parse(opts.PubJWKURL)
 	if err != nil {
 		return fmt.Errorf("could not parse Public JWK URL: %v", err)

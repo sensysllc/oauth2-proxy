@@ -31,9 +31,6 @@ type signInPageWriter struct {
 	// ProxyPrefix is the prefix under which OAuth2 Proxy pages are served.
 	proxyPrefix string
 
-	// ProviderName is the name of the provider that should be displayed on the login button.
-	providerName string
-
 	// SignInMessage is the messge displayed above the login button.
 	signInMessage string
 
@@ -66,7 +63,7 @@ func (s *signInPageWriter) WriteSignInPage(rw http.ResponseWriter, req *http.Req
 		Footer        template.HTML
 		LogoData      template.HTML
 	}{
-		ProviderName:  s.providerName,
+		ProviderName:  tnt.Provider.Data().ProviderName,
 		SignInMessage: template.HTML(s.signInMessage), // #nosec G203 -- We allow unescaped template.HTML since it is user configured options
 		StatusCode:    statusCode,
 		CustomLogin:   s.displayLoginForm,

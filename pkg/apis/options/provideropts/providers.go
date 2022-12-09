@@ -1,4 +1,6 @@
-package options
+package provideropts
+
+import "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options/loginurlopts"
 
 const (
 	// OIDCEmailClaim is the generic email claim used by the OIDC provider.
@@ -67,7 +69,7 @@ type Provider struct {
 	// LoginURL is the authentication endpoint
 	LoginURL string `json:"loginURL,omitempty"`
 	// LoginURLParameters defines the parameters that can be passed from the start URL to the IdP login URL
-	LoginURLParameters []LoginURLParameter `json:"loginURLParameters,omitempty"`
+	LoginURLParameters []loginurlopts.LoginURLParameter `json:"loginURLParameters,omitempty"`
 	// RedeemURL is the token redemption endpoint
 	RedeemURL string `json:"redeemURL,omitempty"`
 	// ProfileURL is the profile access endpoint
@@ -271,7 +273,7 @@ type LoginGovOptions struct {
 	PubJWKURL string `json:"pubjwkURL,omitempty"`
 }
 
-func providerDefaults() Providers {
+func ProviderDefaults() Providers {
 	providers := Providers{
 		{
 			Type: "google",
