@@ -1,0 +1,107 @@
+image:
+  name: intechww-docker-local.jfrog.io/go-builder:0.12
+  username: $JFROG_USERNAME
+  password: $JFROG_PASSWORD
+  email: $JFROG_EMAIL
+
+stepDefinitions:
+  - step: &invalidBranchName
+      name: Branch name is invalid
+      script:
+        - echo "Your branch name is invalid"
+        - 'echo "Branch Name: $(BITBUCKET_BRANCH)"'
+        - 'echo "PR Destination Branch Name: $(BITBUCKET_PR_DESTINATION_BRANCH)"'
+        - exit 1
+  - step: &runUnitTests
+      name: Unit Tests
+      script:
+        - make test
+
+  - step: &runBuild
+      name: Build Services
+      script:
+        - make build
+
+  - step: &buildArtifacts
+      name: Build Docker images and helm charts and docker-compose
+      script:
+        - make lint
+        - make build
+      # services:
+      #   - docker
+  # - step: &publishArtifacts
+  #     name: Publish Docker Images and Helm Charts
+  #     script:
+  #       - export GIT_TAG=$(git show-ref --tags -d | grep ^$BITBUCKET_COMMIT | sed -e 's,.* refs/tags/,,' -e 's/\^{}//' | sed -n 1p)
+  #       - if [ -n "$GIT_TAG" ]; then echo "Tag is '$GIT_TAG'"; else echo "GIT_TAG is not set"; exit 1; fi;
+  #       - make dep
+  #       - make build
+  #       - make docker-bitbucket
+  #       - make chart
+  #       - docker login --username $JFROG_USERNAME --password $JFROG_PASSWORD intechww-docker-local.jfrog.io
+  #       - make publish-docker
+  #       - make publish-chart
+  #       - make publish-openapi
+  #     services:
+  #         - docker
+
+pipelines:
+  # custom: # Pipelines that are triggered manually
+  #   publish-artifacts:
+  #     - step: *runUnitTests
+  #     - step: *publishArtifacts
+      
+  # pull-requests:
+  #   '!{feature/*,bugfix/*,hotfix/*,release/*}':
+  #     - step: *invalidBranchName
+
+  #   'feature/*':
+  #     - step:
+  #         name: Validate PR source and destination
+  #         script:
+  #           - if [[ $BITBUCKET_PR_DESTINATION_BRANCH != "develop" ]]; then echo "'feature' branch can only be merged in 'develop' branch"; exit 1; fi;
+  #     - parallel:
+  #         - step: *runUnitTests
+  #         - step: *runBuild
+  #         - step: *buildArtifacts
+
+  #   'release/*':
+  #     - step:
+  #         name: Validate PR source and destination
+  #         script:
+  #           - if [[ $BITBUCKET_PR_DESTINATION_BRANCH != "main" && $BITBUCKET_PR_DESTINATION_BRANCH != "develop" ]]; then echo "'release' branch can only be merged in either 'main' or 'develop' branch"; exit 1; fi;
+  #     - parallel:
+  #         - step: *runUnitTests
+  #         - step: *runBuild
+  #         - step: *buildArtifacts
+
+  #   'bugfix/*':
+  #     - step:
+  #         name: Validate PR source and destination
+  #         script:
+  #           - if [[ $BITBUCKET_PR_DESTINATION_BRANCH != "release/"* && $BITBUCKET_PR_DESTINATION_BRANCH != "develop" ]]; then echo "'bugfix' branch can only be merged in either 'release/*' or 'develop' branch"; exit 1; fi;
+  #     - parallel:
+  #         - step: *runUnitTests
+  #         - step: *runBuild
+  #         - step: *buildArtifacts
+
+  #   'hotfix/*':
+  #     - step:
+  #         name: Validate PR source and destination
+  #         script:
+  #           - if [[ $BITBUCKET_PR_DESTINATION_BRANCH != "main" && $BITBUCKET_PR_DESTINATION_BRANCH != "release/"* ]]; then echo "'hotfix' branch can only be merged in either 'main' or 'release/* 'branch"; exit 1; fi;
+  #     - parallel:
+  #         - step: *runUnitTests
+  #         - step: *runBuild
+  #         - step: *buildArtifacts
+
+  branches:
+    '{feature/*,bugfix/*,hotfix/*,release/*,develop,main}':
+      # - parallel:
+      #     - step: *runUnitTests
+      #     - step: *runBuild
+      #     - step: *buildArtifacts
+      - step: *buildArtifacts
+
+    '!{feature/*,bugfix/*,hotfix/*,release/*,develop,main}':
+      - step: *invalidBranchName
