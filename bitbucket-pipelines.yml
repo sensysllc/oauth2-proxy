@@ -1,5 +1,5 @@
 image:
-  name: intechww-docker-local.jfrog.io/go-builder:0.12
+  name: intechww-docker-local.jfrog.io/pipeline-cmms-services:latest
   username: $JFROG_USERNAME
   password: $JFROG_PASSWORD
   email: $JFROG_EMAIL
@@ -21,6 +21,7 @@ stepDefinitions:
       name: Build Services
       script:
         - make build
+        - make docker
 
   - step: &buildArtifacts
       name: Build Docker images and helm charts and docker-compose
