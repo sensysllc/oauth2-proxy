@@ -26,10 +26,11 @@ stepDefinitions:
   - step: &buildArtifacts
       name: Build Docker images and helm charts and docker-compose
       script:
-        - make lint
+      #  - make lint
         - make build
-      # services:
-      #   - docker
+        - make docker
+      services:
+        - docker
   # - step: &publishArtifacts
   #     name: Publish Docker Images and Helm Charts
   #     script:
@@ -98,11 +99,9 @@ pipelines:
 
   branches:
     '{feature/*,bugfix/*,hotfix/*,release/*,develop,main}':
-      # - parallel:
-      #     - step: *runUnitTests
-      #     - step: *runBuild
-      #     - step: *buildArtifacts
-      - step: *runBuild
+      - parallel:
+          - step: *runBuild
+          - step: *buildArtifacts
 
     '!{feature/*,bugfix/*,hotfix/*,release/*,develop,main}':
       - step: *invalidBranchName
