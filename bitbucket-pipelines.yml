@@ -101,7 +101,7 @@ pipelines:
       #     - step: *runUnitTests
       #     - step: *runBuild
       #     - step: *buildArtifacts
-      - step: *buildArtifacts
+      - step: *runBuild
 
     '!{feature/*,bugfix/*,hotfix/*,release/*,develop,main}':
       - step: *invalidBranchName
