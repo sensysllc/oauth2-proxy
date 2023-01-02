@@ -121,13 +121,16 @@ alphaConfig:
   tenantLoader:
     type: "config"
     config:
-      filePath: "/conf/tenants/tenants.yaml"
-  tenantMatcher:
-    rules:
-      - source: "host" 
-        header: ""
-        queryParam: ""
-        expr: "^[^.]*"
+      tenantsFile: "/conf/tenants/tenants.yaml"
+      rules:
+        - source: "header"
+          header: "Tenantid"
+          expr: (^[^\.]*) # matches everything before the first '.', so gets 'www' out from 'www.google.com'
+          captureGroup: 1
+        - source: "host"
+          expr: (^[^\.]*) # matches everything before the first '.', so gets 'www' out from 'www.google.com'
+          captureGroup: 1
+
 tenants:
   tenants:
   - id: "iis200"
