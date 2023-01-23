@@ -16,7 +16,6 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
-	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options/provideropts"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/sessions"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/logger"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/requests"
@@ -85,7 +84,7 @@ var (
 )
 
 // NewGoogleProvider initiates a new GoogleProvider
-func NewGoogleProvider(p *ProviderData, opts provideropts.GoogleOptions) (*GoogleProvider, error) {
+func NewGoogleProvider(p *ProviderData, opts options.GoogleOptions) (*GoogleProvider, error) {
 	p.setProviderDefaults(providerDefaults{
 		name:        googleProviderName,
 		loginURL:    googleDefaultLoginURL,
