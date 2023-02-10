@@ -1,0 +1,7 @@
+apiVersion: v2
+name: oauth2-proxy
+description: oauth2-proxy
+
+type: application
+version: 0.0.0
+appVersion: 0.0.0

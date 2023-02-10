@@ -2,9 +2,9 @@ GO ?= go
 GOLANGCILINT ?= golangci-lint
 
 BINARY := oauth2-proxy
-VERSION ?= $(shell git describe --always --dirty --tags 2>/dev/null || echo "undefined")
+VERSION:=$(shell if [ -n "${GIT_TAG}" ]; then echo ${GIT_TAG}; else echo "0.0.0"; fi;)
 # Allow to override image registry.
-REGISTRY ?= quay.io/oauth2-proxy
+REGISTRY ?= intechww-docker-local.jfrog.io
 .NOTPARALLEL:
 
 GO_MAJOR_VERSION = $(shell $(GO) version | cut -c 14- | cut -d' ' -f1 | cut -d'.' -f1)
@@ -31,7 +31,7 @@ distclean: clean
 
 .PHONY: lint
 lint: validate-go-version
-	GO111MODULE=on $(GOLANGCILINT) run
+	GO111MODULE=off $(GOLANGCILINT) run
 
 .PHONY: build
 build: validate-go-version clean $(BINARY)
@@ -40,44 +40,32 @@ $(BINARY):
 	CGO_ENABLED=0 $(GO) build -a -installsuffix cgo -ldflags="-X main.VERSION=${VERSION}" -o $@ github.com/oauth2-proxy/oauth2-proxy/v7
 
 DOCKER_BUILD_PLATFORM ?= linux/amd64,linux/ppc64le,linux/arm/v6,linux/arm/v8
-DOCKER_BUILD_RUNTIME_IMAGE ?= alpine:3.15
-DOCKER_BUILDX_ARGS ?= --build-arg RUNTIME_IMAGE=${DOCKER_BUILD_RUNTIME_IMAGE}
-DOCKER_BUILDX := docker buildx build ${DOCKER_BUILDX_ARGS} --build-arg VERSION=${VERSION}
-DOCKER_BUILDX_X_PLATFORM := $(DOCKER_BUILDX) --platform ${DOCKER_BUILD_PLATFORM}
-DOCKER_BUILDX_PUSH := docker buildx build --push ${DOCKER_BUILDX_ARGS} --build-arg VERSION=${VERSION}
-DOCKER_BUILDX_PUSH_X_PLATFORM := $(DOCKER_BUILDX_PUSH) --platform ${DOCKER_BUILD_PLATFORM}
+#DOCKER_BUILD_RUNTIME_IMAGE ?= alpine:3.15
+DOCKER_BUILDX := docker buildx build #${DOCKER_BUILDX_ARGS} --build-arg VERSION=${VERSION}
 
 .PHONY: docker
 docker:
-	$(DOCKER_BUILDX_X_PLATFORM) -f Dockerfile -t $(REGISTRY)/oauth2-proxy:latest .
+	docker build -t $(REGISTRY)/oauth2-proxy:$(VERSION) .
 
-.PHONY: docker-all
-docker-all: docker
-	$(DOCKER_BUILDX) --platform linux/amd64 -t $(REGISTRY)/oauth2-proxy:latest-amd64 .
-	$(DOCKER_BUILDX_X_PLATFORM) -f Dockerfile -t $(REGISTRY)/oauth2-proxy:${VERSION} .
-	$(DOCKER_BUILDX) --platform linux/amd64 -t $(REGISTRY)/oauth2-proxy:${VERSION}-amd64 .
-	$(DOCKER_BUILDX) --platform linux/arm64 -t $(REGISTRY)/oauth2-proxy:latest-arm64 .
-	$(DOCKER_BUILDX) --platform linux/arm64 -t $(REGISTRY)/oauth2-proxy:${VERSION}-arm64 .
-	$(DOCKER_BUILDX) --platform linux/ppc64le -t $(REGISTRY)/oauth2-proxy:latest-ppc64le .
-	$(DOCKER_BUILDX) --platform linux/ppc64le -t $(REGISTRY)/oauth2-proxy:${VERSION}-ppc64le .
-	$(DOCKER_BUILDX) --platform linux/arm/v6 -t $(REGISTRY)/oauth2-proxy:latest-armv6 .
-	$(DOCKER_BUILDX) --platform linux/arm/v6 -t $(REGISTRY)/oauth2-proxy:${VERSION}-armv6 .
+.PHONY: docker-local
+docker-local:
+	${DOCKER_BUILDX}  -t $(REGISTRY)/oauth2-proxy:$(VERSION) .
 
 .PHONY: docker-push
 docker-push:
-	$(DOCKER_BUILDX_PUSH_X_PLATFORM) -t $(REGISTRY)/oauth2-proxy:latest .
+	docker image push $(REGISTRY)/oauth2-proxy:$(VERSION)
 
-.PHONY: docker-push-all
-docker-push-all: docker-push
-	$(DOCKER_BUILDX_PUSH) --platform linux/amd64 -t $(REGISTRY)/oauth2-proxy:latest-amd64 .
-	$(DOCKER_BUILDX_PUSH_X_PLATFORM) -t $(REGISTRY)/oauth2-proxy:${VERSION} .
-	$(DOCKER_BUILDX_PUSH) --platform linux/amd64 -t $(REGISTRY)/oauth2-proxy:${VERSION}-amd64 .
-	$(DOCKER_BUILDX_PUSH) --platform linux/arm64 -t $(REGISTRY)/oauth2-proxy:latest-arm64 .
-	$(DOCKER_BUILDX_PUSH) --platform linux/arm64 -t $(REGISTRY)/oauth2-proxy:${VERSION}-arm64 .
-	$(DOCKER_BUILDX_PUSH) --platform linux/ppc64le -t $(REGISTRY)/oauth2-proxy:latest-ppc64le .
-	$(DOCKER_BUILDX_PUSH) --platform linux/ppc64le -t $(REGISTRY)/oauth2-proxy:${VERSION}-ppc64le .
-	$(DOCKER_BUILDX_PUSH) --platform linux/arm/v6 -t $(REGISTRY)/oauth2-proxy:latest-armv6 .
-	$(DOCKER_BUILDX_PUSH) --platform linux/arm/v6 -t $(REGISTRY)/oauth2-proxy:${VERSION}-armv6 .
+.PHONY: publish-chart
+publish-chart:
+	@echo Publishing helm package version: $(VERSION)
+# add '' after -i if using macOS
+	sed -i "s/^version:.*$$/version: $(VERSION)/" helm/oauth2/Chart.yaml
+	sed -i "s/^appVersion:.*$$/appVersion: $(VERSION)/" helm/oauth2/Chart.yaml
+	helm repo add helm https://intechww.jfrog.io/artifactory/helm --username $$JFROG_USERNAME --password $$JFROG_PASSWORD
+	helm repo update
+	helm package --dependency-update helm/oauth2
+	curl -u $(JFROG_USERNAME):$(JFROG_PASSWORD) -XPUT https://intechww.jfrog.io/artifactory/helm-local/$(BINARY)/ -T $(BINARY)-$(VERSION).tgz
+	@echo Version: $(VERSION) helm package published
 
 .PHONY: generate
 generate:
@@ -113,6 +101,7 @@ validate-go-version:
 #    make local-env-down 				# Tear down the basic test environment
 #    make local-env-nginx-up 		# Bring up an nginx based test environment
 #    make local-env-nginx-down 	# Tead down the nginx based test environment
+
 .PHONY: local-env-%
 local-env-%:
 	make -C contrib/local-environment $*

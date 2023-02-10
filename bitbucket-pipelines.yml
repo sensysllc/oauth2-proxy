@@ -1,0 +1,95 @@
+image:
+  name: intechww-docker-local.jfrog.io/pipeline-cmms-services:latest
+  username: $JFROG_USERNAME
+  password: $JFROG_PASSWORD
+  email: $JFROG_EMAIL
+
+stepDefinitions:
+  - step: &invalidBranchName
+      name: Branch name is invalid
+      script:
+        - echo "Your branch name is invalid"
+        - 'echo "Branch Name: $(BITBUCKET_BRANCH)"'
+        - 'echo "PR Destination Branch Name: $(BITBUCKET_PR_DESTINATION_BRANCH)"'
+        - exit 1
+  - step: &runUnitTests
+      name: Unit Tests
+      script:
+        - make test
+
+  - step: &runBuild
+      name: Build Services
+      script:
+        - make build
+
+  - step: &buildArtifacts
+      name: Build Docker images
+      script:
+        - export DOCKER_BUILDKIT=1
+        - make docker
+      services:
+        - docker
+
+  - step: &PublishDocker
+      name: Publish Docker image manually
+      trigger: manual
+      script:
+        - export GIT_TAG="0.0.0-build-${BITBUCKET_BUILD_NUMBER}"
+        - if [ -n "$GIT_TAG" ]; then echo "Tag is '$GIT_TAG'"; else echo "GIT_TAG is not set"; exit 1; fi;
+        - export DOCKER_BUILDKIT=1
+        - docker login --username $JFROG_USERNAME --password $JFROG_PASSWORD intechww-docker-local.jfrog.io
+        - make docker
+        - make docker-push
+      services:
+        - docker
+  
+  - step: &PublishHelm
+      name: Publish Helm Chart manually
+      trigger: manual
+      script:
+        - export GIT_TAG="0.0.0-build-${BITBUCKET_BUILD_NUMBER}"
+        - if [ -n "$GIT_TAG" ]; then echo "Tag is '$GIT_TAG'"; else echo "GIT_TAG is not set"; exit 1; fi;
+        - make publish-chart
+  
+
+  - step: &publishArtifactsviaCI
+      name: Publish Docker Images and Helm Charts
+      script:
+        - export GIT_TAG=$(git show-ref --tags -d | grep ^$BITBUCKET_COMMIT | sed -e 's,.* refs/tags/,,' -e 's/\^{}//' | sed -n 1p)
+        - if [ -n "$GIT_TAG" ]; then echo "Tag is '$GIT_TAG'"; else echo "GIT_TAG is not set"; exit 1; fi;
+        - export DOCKER_BUILDKIT=1
+        - docker login --username $JFROG_USERNAME --password $JFROG_PASSWORD intechww-docker-local.jfrog.io
+        - make docker
+        - make docker-push
+        - make publish-chart
+      services:
+          - docker
+
+pipelines:
+  custom: # Pipelines that are triggered manually
+    publish-artifacts:
+#      - step: *runUnitTests
+      - step: *publishArtifactsviaCI
+      
+  pull-requests:
+    '!{feature/*,bugfix/*,hotfix/*,release/*}':
+      - step: *invalidBranchName
+
+    '{feature/*,bugfix/*,hotfix/*,release/*,develop,main}':
+#      - step: *runUnitTests
+      - step: *buildArtifacts
+      - parallel:
+          - step: *PublishDocker
+          - step: *PublishHelm
+
+  branches:
+    '{feature/*,bugfix/*,hotfix/*,release/*,develop,main}':
+#      - step: *runUnitTests
+      - step: *runBuild  
+      - step: *buildArtifacts
+      - parallel:
+          - step: *PublishDocker
+          - step: *PublishHelm
+
+    '!{feature/*,bugfix/*,hotfix/*,release/*,develop,main}':
+      - step: *invalidBranchName
