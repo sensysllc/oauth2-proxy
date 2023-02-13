@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/providers"
 )
 
@@ -12,7 +13,7 @@ type loader struct {
 	providers     map[string]providers.Provider // providers map, key is provider id
 }
 
-func New(conf options.Providers) (*loader, error) {
+func New(conf options.Providers) (providerloader.Loader, error) {
 	loader := &loader{
 		providersConf: conf,
 	}
@@ -35,7 +36,6 @@ func New(conf options.Providers) (*loader, error) {
 func (l *loader) Load(id string) (providers.Provider, error) {
 	if tnt, ok := l.providers[id]; ok {
 		return tnt, nil
-	} else {
-		return nil, fmt.Errorf("no provider found with id='%s'", id)
 	}
+	return nil, fmt.Errorf("no provider found with id='%s'", id)
 }

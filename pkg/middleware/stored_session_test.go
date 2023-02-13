@@ -89,10 +89,8 @@ func (tp *TestProvider) ValidateSession(ctx context.Context, ss *sessionsapi.Ses
 
 const (
 	refresh        = "Refresh"
-	refreshed      = "Refreshed"
 	noRefresh      = "NoRefresh"
 	notImplemented = "NotImplemented"
-	refreshError   = "RefreshError"
 	providerEmail  = "provider@example.com"
 )
 

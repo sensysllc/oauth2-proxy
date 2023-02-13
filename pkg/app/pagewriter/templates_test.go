@@ -36,8 +36,8 @@ var _ = Describe("Templates", func() {
 		BeforeEach(func() {
 			data = struct {
 				// For default templates
-				TenantId          string
-				TenantIdInputName string
+				TenantID          string
+				TenantIDInputName string
 				ProxyPrefix       string
 				Redirect          string
 				Footer            string
@@ -57,8 +57,8 @@ var _ = Describe("Templates", func() {
 				// For custom templates
 				TestString string
 			}{
-				TenantId:          "<tenantid>",
-				TenantIdInputName: "<tenant-id>",
+				TenantID:          "<tenantid>",
+				TenantIDInputName: "<tenant-id>",
 				ProxyPrefix:       "<proxy-prefix>",
 				Redirect:          "<redirect>",
 				Footer:            "<footer>",

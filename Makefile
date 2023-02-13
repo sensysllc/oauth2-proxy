@@ -88,7 +88,7 @@ verify-generate: generate
 	git diff --exit-code
 
 .PHONY: test
-test:
+test: lint
 	GO111MODULE=on $(GO) test $(TESTCOVER) -v -race ./...
 
 .PHONY: release

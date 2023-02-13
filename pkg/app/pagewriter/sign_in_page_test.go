@@ -27,13 +27,13 @@ var _ = Describe("SignIn Page", func() {
 		var pd providers.Provider
 
 		BeforeEach(func() {
-			errorTmpl, err := template.New("").Parse("{{.Title}} | {{.RequestID}} | {{.TenantId}}")
+			errorTmpl, err := template.New("").Parse("{{.Title}} | {{.RequestID}} | {{.TenantID}}")
 			Expect(err).ToNot(HaveOccurred())
 			errorPage := &errorPageWriter{
 				template: errorTmpl,
 			}
 
-			tmpl, err := template.New("").Parse("{{.ProxyPrefix}} {{.ProviderName}} {{.SignInMessage}} {{.Footer}} {{.Version}} {{.Redirect}} {{.TenantId}} {{.CustomLogin}} {{.LogoData}}")
+			tmpl, err := template.New("").Parse("{{.ProxyPrefix}} {{.ProviderName}} {{.SignInMessage}} {{.Footer}} {{.Version}} {{.Redirect}} {{.TenantID}} {{.CustomLogin}} {{.LogoData}}")
 			Expect(err).ToNot(HaveOccurred())
 
 			signInPage = &signInPageWriter{

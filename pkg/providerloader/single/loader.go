@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/providers"
 )
 
@@ -12,7 +13,7 @@ type loader struct {
 	provider providers.Provider
 }
 
-func New(conf options.Provider) (*loader, error) {
+func New(conf options.Provider) (providerloader.Loader, error) {
 	provider, err := providers.NewProvider(conf)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create new provider: %w", err)
