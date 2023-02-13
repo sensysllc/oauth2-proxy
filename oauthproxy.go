@@ -255,13 +255,16 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 		providerLoader:      providerLoader,
 		tenantMatcher:       tenantmatcher,
 	}
-	p.buildServeMux(opts.ProxyPrefix)
-
-	if err := p.setupServer(opts); err != nil {
-		return nil, fmt.Errorf("error setting up server: %v", err)
-	}
 
 	return p, nil
+}
+
+func (p *OAuthProxy) Init(opts *options.Options) error {
+	p.buildServeMux(p.ProxyPrefix)
+	if err := p.setupServer(opts); err != nil {
+		return fmt.Errorf("error setting up server: %v", err)
+	}
+	return nil
 }
 
 func (p *OAuthProxy) Start() error {
