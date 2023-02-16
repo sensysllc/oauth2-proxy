@@ -101,7 +101,6 @@ validate-go-version:
 #    make local-env-down 				# Tear down the basic test environment
 #    make local-env-nginx-up 		# Bring up an nginx based test environment
 #    make local-env-nginx-down 	# Tead down the nginx based test environment
-
 .PHONY: local-env-%
 local-env-%:
 	make -C contrib/local-environment $*
