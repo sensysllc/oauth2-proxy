@@ -190,6 +190,7 @@ func Test_enrichSession(t *testing.T) {
 
 func TestBasicAuthPassword(t *testing.T) {
 	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger.Printf("%#v", r)
 		var payload string
 		switch r.URL.Path {
 		case "/oauth/token":
@@ -239,8 +240,9 @@ func TestBasicAuthPassword(t *testing.T) {
 	err := validation.Validate(opts)
 	assert.NoError(t, err)
 
-	//providerURL, _ := url.Parse(providerServer.URL)
+	providerURL, _ := url.Parse(providerServer.URL)
 	const emailAddress = "john.doe@example.com"
+	tp := NewTestProvider(providerURL, emailAddress)
 
 	proxy, err := NewOAuthProxy(opts, func(email string) bool {
 		return email == emailAddress
@@ -248,11 +250,15 @@ func TestBasicAuthPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	l := &loader{}
+	l.provider = tp
+	proxy.providerLoader = l
+	plc := buildProviderLoaderChain(opts, l)
+	proxy.providerLoaderChain = plc
 	err = proxy.Init(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	//pd := NewTestProvider(providerURL, emailAddress)
 
 	// Save the required session
 	rw := httptest.NewRecorder()
@@ -495,12 +501,10 @@ func (patTest *PassAccessTokenTest) getEndpointWithCookie(cookie string, endpoin
 	if value == "" {
 		return 0, ""
 	}
-
 	req, err := http.NewRequest("GET", endpoint, strings.NewReader(""))
 	if err != nil {
 		return 0, ""
 	}
-
 	req.AddCookie(&http.Cookie{
 		Name:     cookieName,
 		Value:    value,
@@ -897,7 +901,11 @@ func NewProcessCookieTest(opts ProcessCookieTestOpts, modifiers ...OptionsModifi
 	for _, group := range groups {
 		testProvider.ProviderData.AllowedGroups[group] = struct{}{}
 	}
-	//pcTest.proxy.provider = testProvider
+	l := &loader{}
+	l.provider = testProvider
+	pcTest.proxy.providerLoader = l
+	plc := buildProviderLoaderChain(pcTest.opts, l)
+	pcTest.proxy.providerLoaderChain = plc
 
 	// Now, zero-out proxy.CookieRefresh for the cases that don't involve
 	// access_token validation.
@@ -1261,15 +1269,19 @@ func TestAuthOnlyEndpointSetXAuthRequestHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	l := &loader{}
+	l.provider = &TestProvider{
+		ProviderData: &providers.ProviderData{},
+		ValidToken:   true,
+	}
+	pcTest.proxy.providerLoader = l
+	plc := buildProviderLoaderChain(pcTest.opts, l)
+	pcTest.proxy.providerLoaderChain = plc
+
 	err = pcTest.proxy.Init(pcTest.opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// pcTest.proxy.provider = &TestProvider{
-	// 	ProviderData: &providers.ProviderData{},
-	// 	ValidToken:   true,
-	// }
 
 	pcTest.validateUser = true
 
@@ -1359,14 +1371,19 @@ func TestAuthOnlyEndpointSetBasicAuthTrueRequestHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	l := &loader{}
+	l.provider = &TestProvider{
+		ProviderData: &providers.ProviderData{},
+		ValidToken:   true,
+	}
+	pcTest.proxy.providerLoader = l
+	plc := buildProviderLoaderChain(pcTest.opts, l)
+	pcTest.proxy.providerLoaderChain = plc
+
 	err = pcTest.proxy.Init(pcTest.opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// pcTest.proxy.provider = &TestProvider{
-	// 	ProviderData: &providers.ProviderData{},
-	// 	ValidToken:   true,
-	// }
 
 	pcTest.validateUser = true
 
@@ -1443,14 +1460,19 @@ func TestAuthOnlyEndpointSetBasicAuthFalseRequestHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	l := &loader{}
+	l.provider = &TestProvider{
+		ProviderData: &providers.ProviderData{},
+		ValidToken:   true,
+	}
+	pcTest.proxy.providerLoader = l
+	plc := buildProviderLoaderChain(pcTest.opts, l)
+	pcTest.proxy.providerLoaderChain = plc
+
 	err = pcTest.proxy.Init(pcTest.opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// pcTest.proxy.provider = &TestProvider{
-	// 	ProviderData: &providers.ProviderData{},
-	// 	ValidToken:   true,
-	// }
 
 	pcTest.validateUser = true
 
@@ -1495,17 +1517,22 @@ func TestAuthSkippedForPreflightRequests(t *testing.T) {
 	err := validation.Validate(opts)
 	assert.NoError(t, err)
 
-	//upstreamURL, _ := url.Parse(upstreamServer.URL)
+	upstreamURL, _ := url.Parse(upstreamServer.URL)
 
 	proxy, err := NewOAuthProxy(opts, func(string) bool { return false })
 	if err != nil {
 		t.Fatal(err)
 	}
+	l := &loader{}
+	l.provider = NewTestProvider(upstreamURL, "")
+	proxy.providerLoader = l
+	plc := buildProviderLoaderChain(opts, l)
+	proxy.providerLoaderChain = plc
+
 	err = proxy.Init(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	//proxy.provider = NewTestProvider(upstreamURL, "")
 	rw := httptest.NewRecorder()
 	req, _ := http.NewRequest("OPTIONS", "/preflight-request", nil)
 	proxy.ServeHTTP(rw, req)
@@ -1550,7 +1577,7 @@ type SignatureTest struct {
 	header        http.Header
 	rw            *httptest.ResponseRecorder
 	authenticator *SignatureAuthenticator
-	authProvider  providers.Provider
+	authProvider  *TestProvider
 }
 
 func NewSignatureTest() (*SignatureTest, error) {
@@ -1630,11 +1657,16 @@ func (st *SignatureTest) MakeRequestWithExpectedKey(method, body, key string) er
 	if err != nil {
 		return err
 	}
+	l := &loader{}
+	l.provider = st.authProvider
+	proxy.providerLoader = l
+	plc := buildProviderLoaderChain(st.opts, l)
+	proxy.providerLoaderChain = plc
+
 	err = proxy.Init(st.opts)
 	if err != nil {
 		return err
 	}
-	//proxy.provider = st.authProvider
 
 	var bodyBuf io.ReadCloser
 	if body != "" {
@@ -1975,11 +2007,12 @@ func TestGetJwtSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	//tp, _ := test.proxy.provider.(*TestProvider)
+	p, _ := test.proxy.providerLoader.Load("providerID")
+	tp, _ := p.(*TestProvider)
 
-	// tp.GroupValidator = func(s string) bool {
-	// 	return true
-	// }
+	tp.GroupValidator = func(s string) bool {
+		return true
+	}
 
 	authHeader := fmt.Sprintf("Bearer %s", goodJwt)
 	test.req.Header = map[string][]string{
