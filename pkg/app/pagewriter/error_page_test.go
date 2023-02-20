@@ -18,15 +18,12 @@ var _ = Describe("Error Page Writer", func() {
 		tmpl, err := template.New("").Parse("{{.Title}} {{.Message}} {{.ProxyPrefix}} {{.StatusCode}} {{.Redirect}} {{.RequestID}} {{.Footer}} {{.Version}}")
 		Expect(err).ToNot(HaveOccurred())
 
-		//var pd providers.Provider
-
 		errorPage = &errorPageWriter{
 			template:    tmpl,
 			proxyPrefix: "/prefix/",
 			footer:      "Custom Footer Text",
 			version:     "v0.0.0-test",
 		}
-
 	})
 
 	Context("WriteErrorPage", func() {

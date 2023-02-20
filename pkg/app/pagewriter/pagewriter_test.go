@@ -59,10 +59,7 @@ var _ = Describe("Writer", func() {
 			}
 
 			pd, err = providers.NewProvider(providerConfig)
-			if err != nil {
-				fmt.Println("error received")
-				fmt.Println(err)
-			}
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		Context("With no custom templates", func() {
@@ -136,7 +133,6 @@ var _ = Describe("Writer", func() {
 				recorder := httptest.NewRecorder()
 
 				writer.WriteSignInPage(recorder, request, pd, "/redirect", http.StatusOK)
-
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(body)).To(Equal("Custom Template"))
@@ -198,8 +194,7 @@ var _ = Describe("Writer", func() {
 
 			pd, err = providers.NewProvider(providerConfig)
 			if err != nil {
-				fmt.Println("error received")
-				fmt.Println(err)
+				Expect(err).ToNot(HaveOccurred())
 			}
 		})
 

@@ -66,6 +66,7 @@ func NewTestProvider(providerURL *url.URL, emailAddress string) *TestProvider {
 		GroupValidator: func(s string) bool {
 			return true
 		},
+		ValidToken: true,
 	}
 }
 
@@ -74,16 +75,6 @@ func (tp *TestProvider) GetEmailAddress(_ context.Context, _ *sessionsapi.Sessio
 }
 
 func (tp *TestProvider) ValidateSession(ctx context.Context, ss *sessionsapi.SessionState) bool {
-	if tp.RefreshToken == "_oauth2_proxy=NoRefreshSession" {
-		ss.RefreshToken = "NoRefresh"
-		ss.Lock = &sessionsapi.NoOpLock{}
-		return true
-	}
-	if tp.RefreshToken == "_oauth2_proxy=RefreshError" {
-		ss.RefreshToken = "RefreshError"
-		ss.Lock = &sessionsapi.NoOpLock{}
-		return true
-	}
 	return tp.ValidToken
 }
 
@@ -103,6 +94,7 @@ func (tp *TestProvider) RefreshSession(_ context.Context, _ *sessionsapi.Session
 
 	switch tp.RefreshToken {
 	case refresh:
+		tp.SessionRefreshed = true
 		return true, nil
 	case noRefresh:
 		return false, nil
@@ -546,8 +538,8 @@ var _ = Describe("Stored Session Suite", func() {
 				} else {
 					Expect(err).ToNot(HaveOccurred())
 				}
-				// Expect(gotrefresh).To(Equal(in.expectRefreshed))
-				// Expect(gotvalidate).To(Equal(in.expectValidated))
+				Expect(provider.SessionRefreshed).To(Equal(in.expectRefreshed))
+				Expect(provider.ValidToken).To(Equal(in.expectValidated))
 				testLock, ok := in.session.Lock.(*testLock)
 				Expect(ok).To(Equal(true))
 
@@ -818,6 +810,7 @@ var _ = Describe("Stored Session Suite", func() {
 				}
 
 				provider := NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
+				provider.ValidToken = false
 				Expect(s.validateSession(ctx, provider, session)).To(MatchError("session is invalid"))
 			})
 		})

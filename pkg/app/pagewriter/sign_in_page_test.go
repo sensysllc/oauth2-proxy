@@ -23,7 +23,6 @@ var _ = Describe("SignIn Page", func() {
 	Context("SignIn Page Writer", func() {
 		var request *http.Request
 		var signInPage *signInPageWriter
-		var err error
 		var pd providers.Provider
 
 		BeforeEach(func() {
@@ -69,10 +68,7 @@ var _ = Describe("SignIn Page", func() {
 			}
 
 			pd, err = providers.NewProvider(providerConfig)
-			if err != nil {
-				fmt.Println("error received")
-				fmt.Println(err)
-			}
+			Expect(err).ToNot(HaveOccurred())
 
 			request = httptest.NewRequest("", "http://127.0.0.1/", nil)
 			request = middlewareapi.AddRequestScope(request, &middlewareapi.RequestScope{
@@ -80,17 +76,13 @@ var _ = Describe("SignIn Page", func() {
 			})
 		})
 
-		fmt.Println(err)
 		Context("WriteSignInPage", func() {
 			It("Writes the template to the response writer", func() {
 				recorder := httptest.NewRecorder()
-
 				signInPage.WriteSignInPage(recorder, request, pd, "/redirect", http.StatusOK)
 
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
-				fmt.Println(string(body))
-
 				Expect(string(body)).To(Equal("/prefix/ OpenID Connect Sign In Here Custom Footer Text v0.0.0-test /redirect  true Logo Data"))
 			})
 
@@ -105,7 +97,6 @@ var _ = Describe("SignIn Page", func() {
 
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
-				fmt.Println(string(body))
 				Expect(string(body)).To(Equal(fmt.Sprintf("Internal Server Error | %s | ", testRequestID)))
 			})
 		})
