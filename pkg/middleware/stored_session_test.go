@@ -29,13 +29,11 @@ type testLock struct {
 
 type TestProvider struct {
 	*providers.ProviderData
-	EmailAddress     string
-	ValidToken       bool
-	RefreshToken     string
-	AccessToken      string
-	Concurrent       bool
-	SessionRefreshed bool
-	GroupValidator   func(string) bool
+	EmailAddress   string
+	ValidToken     bool
+	GroupValidator func(string) bool
+	RefreshFunc    func(_ context.Context, _ *sessionsapi.SessionState) (bool, error)
+	ValidateFunc   func(ctx context.Context, ss *sessionsapi.SessionState) bool
 }
 
 var _ providers.Provider = (*TestProvider)(nil)
@@ -62,7 +60,6 @@ func NewTestProvider(providerURL *url.URL, emailAddress string) *TestProvider {
 			Scope: "profile.email",
 		},
 		EmailAddress: emailAddress,
-		Concurrent:   false,
 		GroupValidator: func(s string) bool {
 			return true
 		},
@@ -75,44 +72,22 @@ func (tp *TestProvider) GetEmailAddress(_ context.Context, _ *sessionsapi.Sessio
 }
 
 func (tp *TestProvider) ValidateSession(ctx context.Context, ss *sessionsapi.SessionState) bool {
-	//return tp.ValidToken // as if validation succeeds and refresh fails error is not returned only logged
-	return ss.AccessToken != "Invalid"
+	if tp.ValidateFunc != nil {
+		return tp.ValidateFunc(ctx, ss)
+	}
+	return tp.ValidToken
+}
+
+func (tp *TestProvider) RefreshSession(ctx context.Context, ss *sessionsapi.SessionState) (bool, error) {
+	if tp.RefreshFunc != nil {
+		return tp.RefreshFunc(ctx, ss)
+	}
+	return false, nil
 }
 
 const (
-	refresh        = "Refresh"
-	noRefresh      = "NoRefresh"
-	notImplemented = "NotImplemented"
-	providerEmail  = "provider@example.com"
+	providerEmail = "provider@example.com"
 )
-
-func (tp *TestProvider) RefreshSession(_ context.Context, _ *sessionsapi.SessionState) (bool, error) {
-	if tp.Concurrent {
-		time.Sleep(10 * time.Millisecond)
-		tp.SessionRefreshed = true
-		return true, nil
-	}
-
-	switch tp.RefreshToken {
-	case "_oauth2_proxy=" + refresh:
-		tp.SessionRefreshed = true
-		return true, nil
-	case "_oauth2_proxy=" + noRefresh:
-		return false, nil
-	case "_oauth2_proxy=" + notImplemented:
-		return false, errors.New("error refreshing tokens")
-	case refresh:
-		tp.SessionRefreshed = true
-		return true, nil
-	case noRefresh:
-		return false, nil
-	case notImplemented:
-		return false, errors.New("error refreshing tokens")
-	default:
-		return false, errors.New("error refreshing session")
-	}
-
-}
 
 func (l *testLock) Obtain(_ context.Context, _ time.Duration) error {
 	l.obtainAttempts++
@@ -186,6 +161,22 @@ var _ = Describe("Stored Session Suite", func() {
 		createdPast := now.Add(-5 * time.Minute)
 		createdFuture := now.Add(5 * time.Minute)
 
+		var defaultRefreshFunc = func(_ context.Context, ss *sessionsapi.SessionState) (bool, error) {
+			switch ss.RefreshToken {
+			case refresh:
+				ss.RefreshToken = refreshed
+				return true, nil
+			case noRefresh:
+				return false, nil
+			default:
+				return false, errors.New("error refreshing session")
+			}
+		}
+
+		var defaultValidateFunc = func(_ context.Context, ss *sessionsapi.SessionState) bool {
+			return ss.AccessToken != "Invalid"
+		}
+
 		var defaultSessionStore = &fakeSessionStore{
 			LoadFunc: func(req *http.Request) (*sessionsapi.SessionState, error) {
 				switch req.Header.Get("Cookie") {
@@ -214,13 +205,6 @@ var _ = Describe("Stored Session Suite", func() {
 						CreatedAt:    &createdPast,
 						ExpiresOn:    &createdFuture,
 					}, nil
-				case "_oauth2_proxy=NeedRefreshSession":
-					return &sessionsapi.SessionState{
-						RefreshToken: "Refreshed",
-						CreatedAt:    &now,
-						ExpiresOn:    &createdFuture,
-						Lock:         &sessionsapi.NoOpLock{},
-					}, nil
 				case "_oauth2_proxy=RefreshError":
 					return &sessionsapi.SessionState{
 						RefreshToken: "RefreshError",
@@ -229,8 +213,6 @@ var _ = Describe("Stored Session Suite", func() {
 					}, nil
 				case "_oauth2_proxy=NonExistent":
 					return nil, fmt.Errorf("invalid cookie")
-				case "_oauth2_proxy=RefreshErrorValidationError":
-					return nil, nil
 				default:
 					return nil, nil
 				}
@@ -251,6 +233,8 @@ var _ = Describe("Stored Session Suite", func() {
 			expectedSession *sessionsapi.SessionState
 			store           sessionsapi.SessionStore
 			refreshPeriod   time.Duration
+			refreshSession  func(context.Context, *sessionsapi.SessionState) (bool, error)
+			validateSession func(context.Context, *sessionsapi.SessionState) bool
 		}
 
 		DescribeTable("when serving a request",
@@ -275,7 +259,8 @@ var _ = Describe("Stored Session Suite", func() {
 				// from the scope
 				var gotSession *sessionsapi.SessionState
 				tp := NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
-				tp.RefreshToken = req.Header.Get("Cookie")
+				tp.RefreshFunc = in.refreshSession
+				tp.ValidateFunc = in.validateSession
 
 				req = req.WithContext(util.AppendToContext(req.Context(), tp))
 
@@ -292,6 +277,8 @@ var _ = Describe("Stored Session Suite", func() {
 				expectedSession: nil,
 				store:           defaultSessionStore,
 				refreshPeriod:   1 * time.Minute,
+				refreshSession:  defaultRefreshFunc,
+				validateSession: defaultValidateFunc,
 			}),
 			Entry("with an invalid cookie", storedSessionLoaderTableInput{
 				requestHeaders: http.Header{
@@ -301,6 +288,8 @@ var _ = Describe("Stored Session Suite", func() {
 				expectedSession: nil,
 				store:           defaultSessionStore,
 				refreshPeriod:   1 * time.Minute,
+				refreshSession:  defaultRefreshFunc,
+				validateSession: defaultValidateFunc,
 			}),
 			Entry("with an existing session", storedSessionLoaderTableInput{
 				requestHeaders: http.Header{
@@ -312,8 +301,10 @@ var _ = Describe("Stored Session Suite", func() {
 				expectedSession: &sessionsapi.SessionState{
 					RefreshToken: "Existing",
 				},
-				store:         defaultSessionStore,
-				refreshPeriod: 1 * time.Minute,
+				store:           defaultSessionStore,
+				refreshPeriod:   1 * time.Minute,
+				refreshSession:  defaultRefreshFunc,
+				validateSession: defaultValidateFunc,
 			}),
 			Entry("with a session that has not expired", storedSessionLoaderTableInput{
 				requestHeaders: http.Header{
@@ -326,8 +317,10 @@ var _ = Describe("Stored Session Suite", func() {
 					ExpiresOn:    &createdFuture,
 					Lock:         &sessionsapi.NoOpLock{},
 				},
-				store:         defaultSessionStore,
-				refreshPeriod: 1 * time.Minute,
+				store:           defaultSessionStore,
+				refreshPeriod:   1 * time.Minute,
+				refreshSession:  defaultRefreshFunc,
+				validateSession: defaultValidateFunc,
 			}),
 			Entry("with a session that cannot refresh and has expired", storedSessionLoaderTableInput{
 				requestHeaders: http.Header{
@@ -337,6 +330,8 @@ var _ = Describe("Stored Session Suite", func() {
 				expectedSession: nil,
 				store:           defaultSessionStore,
 				refreshPeriod:   1 * time.Minute,
+				refreshSession:  defaultRefreshFunc,
+				validateSession: defaultValidateFunc,
 			}),
 			Entry("with a session that can refresh, but is younger than refresh period", storedSessionLoaderTableInput{
 				requestHeaders: http.Header{
@@ -348,12 +343,14 @@ var _ = Describe("Stored Session Suite", func() {
 					CreatedAt:    &createdPast,
 					ExpiresOn:    &createdFuture,
 				},
-				store:         defaultSessionStore,
-				refreshPeriod: 10 * time.Minute,
+				store:           defaultSessionStore,
+				refreshPeriod:   10 * time.Minute,
+				refreshSession:  defaultRefreshFunc,
+				validateSession: defaultValidateFunc,
 			}),
 			Entry("with a session that can refresh and is older than the refresh period", storedSessionLoaderTableInput{
 				requestHeaders: http.Header{
-					"Cookie": []string{"_oauth2_proxy=NeedRefreshSession"},
+					"Cookie": []string{"_oauth2_proxy=RefreshSession"},
 				},
 				existingSession: nil,
 				expectedSession: &sessionsapi.SessionState{
@@ -362,8 +359,10 @@ var _ = Describe("Stored Session Suite", func() {
 					ExpiresOn:    &createdFuture,
 					Lock:         &sessionsapi.NoOpLock{},
 				},
-				store:         defaultSessionStore,
-				refreshPeriod: 1 * time.Minute,
+				store:           defaultSessionStore,
+				refreshPeriod:   1 * time.Minute,
+				refreshSession:  defaultRefreshFunc,
+				validateSession: defaultValidateFunc,
 			}),
 			Entry("when the provider refresh fails but validation succeeds", storedSessionLoaderTableInput{
 				requestHeaders: http.Header{
@@ -376,17 +375,21 @@ var _ = Describe("Stored Session Suite", func() {
 					ExpiresOn:    &createdFuture,
 					Lock:         &sessionsapi.NoOpLock{},
 				},
-				store:         defaultSessionStore,
-				refreshPeriod: 1 * time.Minute,
+				store:           defaultSessionStore,
+				refreshPeriod:   1 * time.Minute,
+				refreshSession:  defaultRefreshFunc,
+				validateSession: defaultValidateFunc,
 			}),
 			Entry("when the provider refresh fails and validation fails", storedSessionLoaderTableInput{
 				requestHeaders: http.Header{
-					"Cookie": []string{"_oauth2_proxy=RefreshErrorValidationError"},
+					"Cookie": []string{"_oauth2_proxy=RefreshError"},
 				},
 				existingSession: nil,
 				expectedSession: nil,
 				store:           defaultSessionStore,
 				refreshPeriod:   1 * time.Minute,
+				refreshSession:  defaultRefreshFunc,
+				validateSession: func(context.Context, *sessionsapi.SessionState) bool { return false },
 			}),
 			Entry("when the session is not refreshed and is no longer valid", storedSessionLoaderTableInput{
 				requestHeaders: http.Header{
@@ -396,6 +399,8 @@ var _ = Describe("Stored Session Suite", func() {
 				expectedSession: nil,
 				store:           defaultSessionStore,
 				refreshPeriod:   1 * time.Minute,
+				refreshSession:  defaultRefreshFunc,
+				validateSession: defaultValidateFunc,
 			}),
 		)
 
@@ -428,10 +433,6 @@ var _ = Describe("Stored Session Suite", func() {
 				}
 
 				refreshedChan := make(chan bool, in.numConcReqs)
-
-				tp := NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
-				tp.Concurrent = true
-
 				for i := 0; i < in.numConcReqs; i++ {
 					go func(refreshedChan chan bool, lockConc sessionsapi.Lock) {
 						scope := &middlewareapi.RequestScope{
@@ -442,23 +443,30 @@ var _ = Describe("Stored Session Suite", func() {
 						req := httptest.NewRequest("", "/", nil)
 						req = middlewareapi.AddRequestScope(req, scope)
 
-						ctx := util.AppendToContext(req.Context(), tp)
-						req = req.WithContext(ctx)
-
 						rw := httptest.NewRecorder()
 
+						sessionRefreshed := false
+						tp := NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
+						tp.RefreshFunc = func(ctx context.Context, s *sessionsapi.SessionState) (bool, error) {
+							time.Sleep(10 * time.Millisecond)
+							sessionRefreshed = true
+							return true, nil
+						}
+						tp.ValidateFunc = func(context.Context, *sessionsapi.SessionState) bool {
+							return true
+						}
 						opts := &StoredSessionLoaderOptions{
 							SessionStore:  store,
 							RefreshPeriod: in.refreshPeriod,
 						}
 
+						ctx := util.AppendToContext(req.Context(), tp)
+						req = req.WithContext(ctx)
+
 						handler := NewStoredSessionLoader(opts)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 						handler.ServeHTTP(rw, req)
 
-						lock.Lock()
-						defer lock.Unlock()
-						refreshedChan <- tp.SessionRefreshed
-						tp.SessionRefreshed = false
+						refreshedChan <- sessionRefreshed
 					}(refreshedChan, lockConc)
 				}
 				var refreshedSlice []bool
@@ -516,6 +524,8 @@ var _ = Describe("Stored Session Suite", func() {
 
 		DescribeTable("with a session",
 			func(in refreshSessionIfNeededTableInput) {
+				refreshed := false
+				validated := false
 
 				session := &sessionsapi.SessionState{}
 				*session = *in.session
@@ -542,9 +552,23 @@ var _ = Describe("Stored Session Suite", func() {
 				}
 
 				provider := NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
-				provider.AccessToken = in.session.AccessToken
-				provider.RefreshToken = in.session.RefreshToken
-				provider.ValidToken = in.expectValidated
+				provider.RefreshFunc = func(_ context.Context, ss *sessionsapi.SessionState) (bool, error) {
+					refreshed = true
+					switch ss.RefreshToken {
+					case refresh:
+						return true, nil
+					case noRefresh:
+						return false, nil
+					case notImplemented:
+						return false, providers.ErrNotImplemented
+					default:
+						return false, errors.New("error refreshing session")
+					}
+				}
+				provider.ValidateFunc = func(_ context.Context, ss *sessionsapi.SessionState) bool {
+					validated = true
+					return ss.AccessToken != "Invalid"
+				}
 				req := httptest.NewRequest("", "/", nil)
 				err := s.refreshSessionIfNeeded(nil, req, provider, in.session)
 				if in.expectedErr != nil {
@@ -552,8 +576,8 @@ var _ = Describe("Stored Session Suite", func() {
 				} else {
 					Expect(err).ToNot(HaveOccurred())
 				}
-				Expect(provider.SessionRefreshed).To(Equal(in.expectRefreshed))
-				Expect(provider.ValidToken).To(Equal(in.expectValidated))
+				Expect(refreshed).To(Equal(in.expectRefreshed))
+				Expect(validated).To(Equal(in.expectValidated))
 				testLock, ok := in.session.Lock.(*testLock)
 				Expect(ok).To(Equal(true))
 
@@ -643,27 +667,25 @@ var _ = Describe("Stored Session Suite", func() {
 				refreshPeriod: 1 * time.Minute,
 				session: &sessionsapi.SessionState{
 					RefreshToken: noRefresh,
-					AccessToken:  "Invalid",
 					CreatedAt:    &createdPast,
 					ExpiresOn:    &createdFuture,
 					Lock:         &testLock{},
 				},
-				expectedErr:          errors.New("session is invalid"),
-				expectRefreshed:      false,
-				expectValidated:      false,
+				expectedErr:          nil,
+				expectRefreshed:      true,
+				expectValidated:      true,
 				expectedLockObtained: true,
 			}),
 			Entry("when the provider doesn't implement refresh", refreshSessionIfNeededTableInput{
 				refreshPeriod: 1 * time.Minute,
 				session: &sessionsapi.SessionState{
 					RefreshToken: notImplemented,
-					AccessToken:  "Invalid",
 					CreatedAt:    &createdPast,
 					Lock:         &testLock{},
 				},
-				expectedErr:          errors.New("session is invalid"),
-				expectRefreshed:      false,
-				expectValidated:      false,
+				expectedErr:          nil,
+				expectRefreshed:      true,
+				expectValidated:      true,
 				expectedLockObtained: true,
 			}),
 			Entry("when the session is not refreshed by the provider", refreshSessionIfNeededTableInput{
@@ -676,8 +698,8 @@ var _ = Describe("Stored Session Suite", func() {
 					Lock:         &testLock{},
 				},
 				expectedErr:          errors.New("session is invalid"),
-				expectRefreshed:      false,
-				expectValidated:      false,
+				expectRefreshed:      true,
+				expectValidated:      true,
 				expectedLockObtained: true,
 			}),
 		)
@@ -685,10 +707,9 @@ var _ = Describe("Stored Session Suite", func() {
 
 	Context("refreshSession", func() {
 		type refreshSessionWithProviderTableInput struct {
-			session              *sessionsapi.SessionState
-			expectedErr          error
-			expectSaved          bool
-			expectedLockObtained bool
+			session     *sessionsapi.SessionState
+			expectedErr error
+			expectSaved bool
 		}
 
 		now := time.Now()
@@ -713,8 +734,18 @@ var _ = Describe("Stored Session Suite", func() {
 				req = middlewareapi.AddRequestScope(req, &middlewareapi.RequestScope{})
 
 				provider := NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
-				provider.RefreshToken = in.session.RefreshToken
-				provider.AccessToken = in.session.AccessToken
+				provider.RefreshFunc = func(_ context.Context, ss *sessionsapi.SessionState) (bool, error) {
+					switch ss.RefreshToken {
+					case refresh:
+						return true, nil
+					case noRefresh:
+						return false, nil
+					case notImplemented:
+						return false, providers.ErrNotImplemented
+					default:
+						return false, errors.New("error refreshing session")
+					}
+				}
 				err := s.refreshSession(nil, req, provider, in.session)
 				if in.expectedErr != nil {
 					Expect(err).To(MatchError(in.expectedErr))
@@ -722,70 +753,58 @@ var _ = Describe("Stored Session Suite", func() {
 					Expect(err).ToNot(HaveOccurred())
 				}
 				Expect(saved).To(Equal(in.expectSaved))
-
-				testLock, ok := in.session.Lock.(*testLock)
-				Expect(ok).To(Equal(true))
-				if in.expectedLockObtained {
-					Expect(testLock.obtainAttempts).Should(BeNumerically(">", 0), "Expected at least one attempt at obtaining the session lock")
-				}
-				Expect(testLock.locked).To(BeFalse(), "Expected lock should always be released")
 			},
 			Entry("when the provider does not refresh the session", refreshSessionWithProviderTableInput{
 				session: &sessionsapi.SessionState{
 					RefreshToken: noRefresh,
-					Lock:         &testLock{},
 				},
-				expectedErr:          nil,
-				expectSaved:          false,
-				expectedLockObtained: false,
+				expectedErr: nil,
+				expectSaved: false,
 			}),
 			Entry("when the provider refreshes the session", refreshSessionWithProviderTableInput{
 				session: &sessionsapi.SessionState{
 					RefreshToken: refresh,
-					Lock:         &testLock{},
 				},
-				expectedErr:          nil,
-				expectSaved:          true,
-				expectedLockObtained: false,
+				expectedErr: nil,
+				expectSaved: true,
 			}),
 			Entry("when the provider doesn't implement refresh", refreshSessionWithProviderTableInput{
 				session: &sessionsapi.SessionState{
 					RefreshToken: notImplemented,
-					Lock:         &testLock{},
 				},
-				expectedErr:          errors.New("error refreshing tokens: error refreshing tokens"),
-				expectSaved:          false,
-				expectedLockObtained: false,
+				expectedErr: nil,
+				expectSaved: true,
 			}),
 			Entry("when the provider returns an error", refreshSessionWithProviderTableInput{
 				session: &sessionsapi.SessionState{
 					RefreshToken: "RefreshError",
 					CreatedAt:    &now,
 					ExpiresOn:    &now,
-					Lock:         &testLock{},
 				},
-				expectedErr:          errors.New("error refreshing tokens: error refreshing session"),
-				expectSaved:          false,
-				expectedLockObtained: false,
+				expectedErr: errors.New("error refreshing tokens: error refreshing session"),
+				expectSaved: false,
 			}),
 			Entry("when the saving the session returns an error", refreshSessionWithProviderTableInput{
 				session: &sessionsapi.SessionState{
 					RefreshToken: refresh,
 					AccessToken:  "NoSave",
-					Lock:         &testLock{},
 				},
-				expectedErr:          errors.New("error saving session: unable to save session"),
-				expectSaved:          true,
-				expectedLockObtained: false,
+				expectedErr: errors.New("error saving session: unable to save session"),
+				expectSaved: true,
 			}),
 		)
 	})
 
 	Context("validateSession", func() {
 		var s *storedSessionLoader
+		var provider *TestProvider
 
 		BeforeEach(func() {
 			s = &storedSessionLoader{}
+			provider = NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
+			provider.ValidateFunc = func(_ context.Context, ss *sessionsapi.SessionState) bool {
+				return ss.AccessToken == "Valid"
+			}
 		})
 
 		Context("with a valid session", func() {
@@ -795,9 +814,6 @@ var _ = Describe("Stored Session Suite", func() {
 					AccessToken: "Valid",
 					ExpiresOn:   &expires,
 				}
-
-				provider := NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
-				provider.ValidToken = true
 				Expect(s.validateSession(ctx, provider, session)).To(Succeed())
 			})
 		})
@@ -811,9 +827,6 @@ var _ = Describe("Stored Session Suite", func() {
 					CreatedAt:   &created,
 					ExpiresOn:   &expires,
 				}
-
-				provider := NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
-				provider.ValidToken = true
 				Expect(s.validateSession(ctx, provider, session)).To(MatchError("session is expired"))
 			})
 		})
@@ -825,9 +838,6 @@ var _ = Describe("Stored Session Suite", func() {
 					AccessToken: "Invalid",
 					ExpiresOn:   &expires,
 				}
-
-				provider := NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
-				provider.ValidToken = false
 				Expect(s.validateSession(ctx, provider, session)).To(MatchError("session is invalid"))
 			})
 		})
