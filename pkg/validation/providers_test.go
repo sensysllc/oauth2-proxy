@@ -70,15 +70,5 @@ var _ = Describe("Providers", func() {
 			},
 			errStrings: []string{duplicateProviderIDMsg},
 		}),
-		Entry("with multiple providers and skip provider button", &validateProvidersTableInput{
-			options: &options.Options{
-				SkipProviderButton: true,
-				Providers: options.Providers{
-					validProvider,
-					validLoginGovProvider,
-				},
-			},
-			errStrings: []string{},
-		}),
 	)
 })

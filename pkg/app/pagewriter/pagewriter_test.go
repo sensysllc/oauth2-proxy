@@ -19,8 +19,6 @@ import (
 const (
 	msIssuerURL = "https://login.microsoftonline.com/fabrikamb2c.onmicrosoft.com/v2.0/"
 	msKeysURL   = "https://login.microsoftonline.com/fabrikamb2c.onmicrosoft.com/discovery/v2.0/keys"
-	msAuthURL   = "https://login.microsoftonline.com/fabrikamb2c.onmicrosoft.com/oauth2/v2.0/authorize?p=b2c_1_sign_in"
-	msTokenURL  = "https://login.microsoftonline.com/fabrikamb2c.onmicrosoft.com/oauth2/v2.0/token?p=b2c_1_sign_in"
 )
 
 var _ = Describe("Writer", func() {
@@ -48,8 +46,6 @@ var _ = Describe("Writer", func() {
 				Type:             options.OIDCProvider,
 				ClientID:         "xyz",
 				ClientSecretFile: "abc",
-				LoginURL:         msAuthURL,
-				RedeemURL:        msTokenURL,
 				Scope:            "openid email profile groups",
 				OIDCConfig: options.OIDCOptions{
 					IssuerURL:     msIssuerURL,
@@ -182,8 +178,6 @@ var _ = Describe("Writer", func() {
 				Type:             options.OIDCProvider,
 				ClientID:         "xyz",
 				ClientSecretFile: "abc",
-				LoginURL:         msAuthURL,
-				RedeemURL:        msTokenURL,
 				Scope:            "openid email profile groups",
 				OIDCConfig: options.OIDCOptions{
 					IssuerURL:     msIssuerURL,

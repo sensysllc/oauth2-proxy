@@ -108,7 +108,6 @@ func (tp *TestProvider) ValidateSession(_ context.Context, _ *sessions.SessionSt
 }
 
 func Test_redeemCode(t *testing.T) {
-	providerEmail := "provider@example.com"
 	opts := baseTestOptions()
 	err := validation.Validate(opts)
 	assert.NoError(t, err)
@@ -123,7 +122,10 @@ func Test_redeemCode(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	pd := NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
+	pd, err := providers.NewProvider(opts.Providers[0])
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = proxy.redeemCode(req, "", pd)
 	assert.Equal(t, providers.ErrMissingCode, err)
 }
@@ -250,7 +252,7 @@ func TestBasicAuthPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l := &loader{}
+	l := &providerLoader{}
 	l.provider = tp
 	proxy.providerLoader = l
 	plc := buildProviderLoaderChain(opts, l)
@@ -352,11 +354,11 @@ type PassAccessTokenTestOptions struct {
 	ProxyUpstream   options.Upstream
 }
 
-type loader struct {
-	provider *TestProvider
+type providerLoader struct {
+	provider providers.Provider
 }
 
-func (l *loader) Load(_ string) (providers.Provider, error) {
+func (l *providerLoader) Load(_ string) (providers.Provider, error) {
 	return l.provider, nil
 }
 
@@ -428,8 +430,7 @@ func NewPassAccessTokenTest(opts PassAccessTokenTestOptions) (*PassAccessTokenTe
 	if err != nil {
 		return nil, err
 	}
-
-	l := &loader{}
+	l := &providerLoader{}
 	l.provider = testProvider
 	patt.proxy.providerLoader = l
 	plc := buildProviderLoaderChain(patt.opts, l)
@@ -440,7 +441,6 @@ func NewPassAccessTokenTest(opts PassAccessTokenTestOptions) (*PassAccessTokenTe
 	}
 
 	return patt, nil
-
 }
 
 func (patTest *PassAccessTokenTest) Close() {
@@ -501,6 +501,7 @@ func (patTest *PassAccessTokenTest) getEndpointWithCookie(cookie string, endpoin
 	if value == "" {
 		return 0, ""
 	}
+
 	req, err := http.NewRequest("GET", endpoint, strings.NewReader(""))
 	if err != nil {
 		return 0, ""
@@ -901,7 +902,7 @@ func NewProcessCookieTest(opts ProcessCookieTestOpts, modifiers ...OptionsModifi
 	for _, group := range groups {
 		testProvider.ProviderData.AllowedGroups[group] = struct{}{}
 	}
-	l := &loader{}
+	l := &providerLoader{}
 	l.provider = testProvider
 	pcTest.proxy.providerLoader = l
 	plc := buildProviderLoaderChain(pcTest.opts, l)
@@ -1269,7 +1270,7 @@ func TestAuthOnlyEndpointSetXAuthRequestHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l := &loader{}
+	l := &providerLoader{}
 	l.provider = &TestProvider{
 		ProviderData: &providers.ProviderData{},
 		ValidToken:   true,
@@ -1371,7 +1372,7 @@ func TestAuthOnlyEndpointSetBasicAuthTrueRequestHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l := &loader{}
+	l := &providerLoader{}
 	l.provider = &TestProvider{
 		ProviderData: &providers.ProviderData{},
 		ValidToken:   true,
@@ -1460,7 +1461,7 @@ func TestAuthOnlyEndpointSetBasicAuthFalseRequestHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l := &loader{}
+	l := &providerLoader{}
 	l.provider = &TestProvider{
 		ProviderData: &providers.ProviderData{},
 		ValidToken:   true,
@@ -1523,7 +1524,7 @@ func TestAuthSkippedForPreflightRequests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l := &loader{}
+	l := &providerLoader{}
 	l.provider = NewTestProvider(upstreamURL, "")
 	proxy.providerLoader = l
 	plc := buildProviderLoaderChain(opts, l)
@@ -1577,7 +1578,7 @@ type SignatureTest struct {
 	header        http.Header
 	rw            *httptest.ResponseRecorder
 	authenticator *SignatureAuthenticator
-	authProvider  *TestProvider
+	authProvider  providers.Provider
 }
 
 func NewSignatureTest() (*SignatureTest, error) {
@@ -1657,7 +1658,7 @@ func (st *SignatureTest) MakeRequestWithExpectedKey(method, body, key string) er
 	if err != nil {
 		return err
 	}
-	l := &loader{}
+	l := &providerLoader{}
 	l.provider = st.authProvider
 	proxy.providerLoader = l
 	plc := buildProviderLoaderChain(st.opts, l)
@@ -1831,7 +1832,6 @@ func TestClearSplitCookie(t *testing.T) {
 	opts := baseTestOptions()
 	opts.Cookie.Secret = base64CookieSecret
 	opts.Cookie.NamePrefix = "oauth2"
-
 	opts.Cookie.Domains = []string{"abc"}
 	err := validation.Validate(opts)
 	assert.NoError(t, err)
@@ -1841,10 +1841,10 @@ func TestClearSplitCookie(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	p := OAuthProxy{CookieOptions: &opts.Cookie, sessionStore: store}
 	var rw = httptest.NewRecorder()
 	req := httptest.NewRequest("get", "/", nil)
-	opts.Cookie.Name(req.Context())
-	p := OAuthProxy{CookieOptions: &opts.Cookie, sessionStore: store}
+
 	req.AddCookie(&http.Cookie{
 		Name:  "test1",
 		Value: "test1",
@@ -2007,9 +2007,11 @@ func TestGetJwtSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, _ := test.proxy.providerLoader.Load("providerID")
+	p, err := test.proxy.providerLoader.Load("providerID")
+	if err != nil {
+		t.Fatal(err)
+	}
 	tp, _ := p.(*TestProvider)
-
 	tp.GroupValidator = func(s string) bool {
 		return true
 	}
@@ -2153,7 +2155,6 @@ func baseTestOptions() *options.Options {
 	opts.Providers[0].ClientID = clientID
 	opts.Providers[0].ClientSecret = clientSecret
 	opts.EmailDomains = []string{"*"}
-	opts.TenantMatcher.Rules = []*options.TenantMatcherRule{{Expr: ".*", Source: "query", QueryParam: "tenantid", CaptureGroup: 0}}
 
 	// Default injected headers for legacy configuration
 	opts.InjectRequestHeaders = []options.Header{

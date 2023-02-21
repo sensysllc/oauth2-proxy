@@ -29,7 +29,6 @@ import (
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/encryption"
 	proxyhttp "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/http"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader"
-	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader/factory"
 	providerLoaderUtil "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader/util"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/sessions/decorators"
 	tenantmatcher "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/tenant/matcher"
@@ -197,7 +196,7 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 		return nil, fmt.Errorf("unable to create tenant matcher: %w", err)
 	}
 
-	providerLoader, err := factory.NewLoader(opts)
+	providerLoader, err := providerloader.NewLoader(opts)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create tenant loader: %w", err)
 	}
