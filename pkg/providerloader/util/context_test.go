@@ -9,8 +9,6 @@ import (
 	"github.com/oauth2-proxy/oauth2-proxy/v7/providers"
 )
 
-const key contextKey = "key"
-
 func TestFromContext(t *testing.T) {
 	p, _ := providers.NewProvider(options.Provider{})
 	tests := []struct {
@@ -18,13 +16,13 @@ func TestFromContext(t *testing.T) {
 		ctx  context.Context
 		want providers.Provider
 	}{
-		{"From context",
+		{"From context with valid key",
 			context.WithValue(context.Background(), providerKey, p),
 			p,
 		},
 		{
 			"From context with invalid key",
-			context.WithValue(context.Background(), key, "id"),
+			context.WithValue(context.Background(), contextKey("gdyewiu"), "id"),
 			nil,
 		},
 	}

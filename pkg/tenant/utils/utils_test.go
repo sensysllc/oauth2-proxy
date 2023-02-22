@@ -13,12 +13,12 @@ func TestFromContext(t *testing.T) {
 		ctx  context.Context
 		want string
 	}{
-		{"From context",
+		{"From context with valid key",
 			context.WithValue(context.Background(), tenantIDKey, "id"),
 			"id",
 		},
 		{
-			"From context",
+			"From context with invalid key",
 			context.WithValue(context.Background(), contextKey("xyfyuh"), "id"),
 			"",
 		},

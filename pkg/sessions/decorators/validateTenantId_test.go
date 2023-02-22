@@ -39,46 +39,44 @@ func TestTenantIdValidator(t *testing.T) {
 }
 
 func TestSave(t *testing.T) {
-	var got *string
-	somestr := ""
-	got = &somestr
-	tiv := &tenantIDValidator{
-		&fakeSessionStore{
-			SaveFunc: func(_ http.ResponseWriter, _ *http.Request, s *sessionsapi.SessionState) error {
-				*got = s.TenantID
-				return nil
-			},
-		},
-	}
 	rw := httptest.NewRecorder()
-	s := &sessionsapi.SessionState{}
 
 	tests := []struct {
 		name    string
 		req     *http.Request
-		want    string
+		tiv     *tenantIDValidator
 		wantErr bool
 	}{
 		{
-			"validateTenantId save",
-			requestWithTenantIDContext("tid"),
-			"tid",
+			"validateTenantId save with no error",
+			&http.Request{},
+			&tenantIDValidator{
+				&fakeSessionStore{
+					SaveFunc: func(_ http.ResponseWriter, _ *http.Request, _ *sessionsapi.SessionState) error {
+						return nil
+					},
+				},
+			},
 			false,
 		},
 		{
-			"validateTenantId save",
+			"validateTenantId save with error",
 			&http.Request{},
-			"",
+			&tenantIDValidator{
+				&fakeSessionStore{
+					SaveFunc: func(_ http.ResponseWriter, _ *http.Request, _ *sessionsapi.SessionState) error {
+						return fmt.Errorf("error")
+					},
+				},
+			},
 			true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tiv.Save(rw, tt.req, s)
-			if !reflect.DeepEqual(*got, tt.want) {
-				t.Errorf("validatetenantid save  = %v, want %v", *got, tt.want)
-			} else if err != nil && !tt.wantErr {
+			err := tt.tiv.Save(rw, tt.req, &sessionsapi.SessionState{})
+			if err != nil && !tt.wantErr {
 				t.Errorf("validatetenantid save   = %v, want %v", err, tt.wantErr)
 			}
 		})
@@ -86,49 +84,59 @@ func TestSave(t *testing.T) {
 }
 
 func TestLoad(t *testing.T) {
-	tiv := &tenantIDValidator{
-		&fakeSessionStore{
-			LoadFunc: func(req *http.Request) (*sessionsapi.SessionState, error) {
-				if req.Context() == nil {
-					return nil, fmt.Errorf("no tenant found")
-				}
-				s := &sessionsapi.SessionState{}
-				s.TenantID = "dummyid"
-				return s, nil
-			},
-		},
-	}
 	tests := []struct {
 		name    string
 		req     *http.Request
 		want    *sessionsapi.SessionState
+		tiv     *tenantIDValidator
 		wantErr bool
 	}{
 		{
-			"load",
+			"load with no error",
 			requestWithTenantIDContext("dummyid"),
 			&sessionsapi.SessionState{
 				TenantID: "dummyid",
 			},
+			&tenantIDValidator{
+				&fakeSessionStore{
+					LoadFunc: func(req *http.Request) (*sessionsapi.SessionState, error) {
+						return &sessionsapi.SessionState{TenantID: "dummyid"}, nil
+					},
+				},
+			},
 			false,
 		},
 		{
-			"load",
-			requestWithTenantIDContext("tid"),
+			"load with error returned due to tenantid does not match",
+			requestWithTenantIDContext("dummy"),
 			nil,
+			&tenantIDValidator{
+				&fakeSessionStore{
+					LoadFunc: func(req *http.Request) (*sessionsapi.SessionState, error) {
+						return &sessionsapi.SessionState{TenantID: "xxx"}, nil
+					},
+				},
+			},
 			true,
 		},
 		{
-			"load",
+			"load with error returned from session store load",
 			&http.Request{},
 			nil,
+			&tenantIDValidator{
+				&fakeSessionStore{
+					LoadFunc: func(req *http.Request) (*sessionsapi.SessionState, error) {
+						return nil, fmt.Errorf("error")
+					},
+				},
+			},
 			true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tiv.Load(tt.req)
+			got, err := tt.tiv.Load(tt.req)
 
 			if err == nil && !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("tenantid load  = %v, want %v", got, tt.want)

@@ -46,13 +46,13 @@ func TestProviderLoader(t *testing.T) {
 		wantProvider providers.Provider
 	}{
 		{
-			"Providerloader",
+			"Providerloader with valid loader",
 			l,
 			req,
 			wantProvider,
 		},
 		{
-			"Providerloader with invalid loader",
+			"Providerloader with invalid loader not found",
 			l,
 			req2,
 			nil,

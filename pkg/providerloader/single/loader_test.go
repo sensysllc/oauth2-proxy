@@ -22,7 +22,7 @@ func TestNew(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			"config loader",
+			"new config loader with no error",
 			options.Provider{
 
 				ID:   "dummy",
@@ -32,7 +32,7 @@ func TestNew(t *testing.T) {
 			true,
 		},
 		{
-			"config loader",
+			"new config loader with error returned",
 			options.Provider{
 
 				ID:   "dummy",
@@ -80,7 +80,7 @@ func TestLoad(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			"load",
+			"single provider load func with no error",
 			"dummy",
 			&providers.KeycloakProvider{},
 			false,
