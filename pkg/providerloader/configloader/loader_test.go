@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
-	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/providers"
 )
 
@@ -18,7 +17,7 @@ func TestNew(t *testing.T) {
 	tests := []struct {
 		name    string
 		conf    options.Providers
-		want    providerloader.Loader
+		want    *Loader
 		wantErr bool
 	}{
 		{
@@ -29,7 +28,7 @@ func TestNew(t *testing.T) {
 					Type: "keycloak",
 				},
 			},
-			&loader{
+			&Loader{
 				providersConf: options.Providers{
 					{
 						ID:   "dummy",
@@ -81,7 +80,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestLoad(t *testing.T) {
-	l := &loader{
+	l := &Loader{
 		providersConf: options.Providers{
 			{
 				ID:   "dummy",

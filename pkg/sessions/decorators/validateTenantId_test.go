@@ -61,7 +61,7 @@ func TestSave(t *testing.T) {
 	}{
 		{
 			"validateTenantId save",
-			requestWithTenantIdContext("tid"),
+			requestWithTenantIDContext("tid"),
 			"tid",
 			false,
 		},
@@ -106,7 +106,7 @@ func TestLoad(t *testing.T) {
 	}{
 		{
 			"load",
-			requestWithTenantIdContext("dummyid"),
+			requestWithTenantIDContext("dummyid"),
 			&sessionsapi.SessionState{
 				TenantID: "dummyid",
 			},
@@ -114,7 +114,7 @@ func TestLoad(t *testing.T) {
 		},
 		{
 			"load",
-			requestWithTenantIdContext("tid"),
+			requestWithTenantIDContext("tid"),
 			nil,
 			true,
 		},
@@ -140,7 +140,7 @@ func TestLoad(t *testing.T) {
 
 }
 
-func requestWithTenantIdContext(tid string) *http.Request {
+func requestWithTenantIDContext(tid string) *http.Request {
 	req := &http.Request{}
 	ctx := tenantutils.AppendToContext(req.Context(), tid)
 

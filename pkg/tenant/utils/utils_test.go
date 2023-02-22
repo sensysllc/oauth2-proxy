@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-const key contextKey = "key"
-
 func TestFromContext(t *testing.T) {
 
 	tests := []struct {
@@ -21,7 +19,7 @@ func TestFromContext(t *testing.T) {
 		},
 		{
 			"From context",
-			context.WithValue(context.Background(), key, "id"),
+			context.WithValue(context.Background(), contextKey("xyfyuh"), "id"),
 			"",
 		},
 	}
