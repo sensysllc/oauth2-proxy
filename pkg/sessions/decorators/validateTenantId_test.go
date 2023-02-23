@@ -39,44 +39,43 @@ func TestTenantIdValidator(t *testing.T) {
 }
 
 func TestSave(t *testing.T) {
+	var got string
 	rw := httptest.NewRecorder()
+	tiv := &tenantIDValidator{
+		&fakeSessionStore{
+			SaveFunc: func(_ http.ResponseWriter, _ *http.Request, s *sessionsapi.SessionState) error {
+				got = s.TenantID
+				return nil
+			},
+		},
+	}
 
 	tests := []struct {
 		name    string
 		req     *http.Request
-		tiv     *tenantIDValidator
+		want    string
 		wantErr bool
 	}{
 		{
 			"validateTenantId save with no error",
-			&http.Request{},
-			&tenantIDValidator{
-				&fakeSessionStore{
-					SaveFunc: func(_ http.ResponseWriter, _ *http.Request, _ *sessionsapi.SessionState) error {
-						return nil
-					},
-				},
-			},
+			requestWithTenantIDContext("tid"),
+			"tid",
 			false,
 		},
 		{
 			"validateTenantId save with error",
 			&http.Request{},
-			&tenantIDValidator{
-				&fakeSessionStore{
-					SaveFunc: func(_ http.ResponseWriter, _ *http.Request, _ *sessionsapi.SessionState) error {
-						return fmt.Errorf("error")
-					},
-				},
-			},
+			"",
 			true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.tiv.Save(rw, tt.req, &sessionsapi.SessionState{})
-			if err != nil && !tt.wantErr {
+			err := tiv.Save(rw, tt.req, &sessionsapi.SessionState{})
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("validatetenantid save  = %v, want %v", got, tt.want)
+			} else if err != nil && !tt.wantErr {
 				t.Errorf("validatetenantid save   = %v, want %v", err, tt.wantErr)
 			}
 		})
