@@ -79,6 +79,7 @@ func TestSave(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			got = ""
 			err := tt.tiv.Save(rw, tt.req, &sessionsapi.SessionState{})
 			if err == nil && !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("validatetenantid save  = %v, want %v", got, tt.want)
