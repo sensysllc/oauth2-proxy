@@ -46,6 +46,7 @@ type AlphaOptions struct {
 
 	ProviderLoader ProviderLoader `json:"providerLoader,omitempty"`
 	TenantMatcher  TenantMatcher  `json:"tenantMatcher,omitempty"`
+	PostgresLoader PostgresLoader `json:"postgresLoader,omitempty"`
 }
 
 // MergeInto replaces alpha options in the Options struct with the values
@@ -59,6 +60,7 @@ func (a *AlphaOptions) MergeInto(opts *Options) {
 	opts.Providers = a.Providers
 	opts.ProviderLoader = a.ProviderLoader
 	opts.TenantMatcher = a.TenantMatcher
+	opts.PostgresLoader = a.PostgresLoader
 }
 
 // ExtractFrom populates the fields in the AlphaOptions with the values from
