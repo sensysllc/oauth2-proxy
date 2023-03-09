@@ -44,7 +44,6 @@ type Options struct {
 
 	ProviderLoader ProviderLoader `cfg:",internal"`
 	TenantMatcher  TenantMatcher  `cfg:",internal"`
-	PostgresLoader PostgresLoader `cfg:",internal"`
 
 	UpstreamServers UpstreamConfig `cfg:",internal"`
 

@@ -19,6 +19,11 @@ type API struct {
 	conf options.API
 }
 
+type ErrorResponse struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+}
+
 func NewAPI(conf options.API, rs *RedisStore, proxyPrefix string) error {
 	r := mux.NewRouter()
 	api := API{
@@ -53,20 +58,33 @@ func NewAPI(conf options.API, rs *RedisStore, proxyPrefix string) error {
 	return nil
 
 }
-func (api *API) CreateHandler(rw http.ResponseWriter, req *http.Request) {
-	rw.Header().Set("Content-Type", "json")
 
+func toJson(v any) string {
+	j, _ := json.Marshal(v)
+	return string(j)
+}
+
+func (api *API) CreateHandler(rw http.ResponseWriter, req *http.Request) {
+	rw.Header().Set("Content-Type", "application/json")
 	id, data, err := api.validateProviderConfig(req)
 	if err != nil {
 		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprint(rw, err)
+		newErr := ErrorResponse{
+			Code: http.StatusBadRequest,
+			Msg:  err.Error(),
+		}
+		fmt.Fprint(rw, toJson(newErr))
 		return
 	}
 
 	err = api.rs.Create(req.Context(), id, data)
 	if err != nil {
 		rw.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(rw, err)
+		newErr := ErrorResponse{
+			Code: http.StatusInternalServerError,
+			Msg:  err.Error(),
+		}
+		fmt.Fprint(rw, toJson(newErr))
 		return
 	}
 
@@ -74,7 +92,7 @@ func (api *API) CreateHandler(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (api *API) GetHandler(rw http.ResponseWriter, req *http.Request) {
-	rw.Header().Set("Content-Type", "json")
+	rw.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(req)
 
 	id := vars["id"]
@@ -82,7 +100,11 @@ func (api *API) GetHandler(rw http.ResponseWriter, req *http.Request) {
 	providerConf, err := api.rs.Get(req.Context(), id)
 	if err != nil {
 		rw.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(rw, err)
+		newErr := ErrorResponse{
+			Code: http.StatusInternalServerError,
+			Msg:  err.Error(),
+		}
+		fmt.Fprint(rw, toJson(newErr))
 		return
 	}
 
@@ -91,7 +113,7 @@ func (api *API) GetHandler(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (api *API) DeleteHandler(rw http.ResponseWriter, req *http.Request) {
-	rw.Header().Set("Content-Type", "json")
+	rw.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(req)
 
@@ -100,7 +122,11 @@ func (api *API) DeleteHandler(rw http.ResponseWriter, req *http.Request) {
 	err := api.rs.Delete(req.Context(), id)
 	if err != nil {
 		rw.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(rw, err)
+		newErr := ErrorResponse{
+			Code: http.StatusInternalServerError,
+			Msg:  err.Error(),
+		}
+		fmt.Fprint(rw, toJson(newErr))
 		return
 	}
 
@@ -108,12 +134,16 @@ func (api *API) DeleteHandler(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (api *API) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
-	rw.Header().Set("Content-Type", "json")
+	rw.Header().Set("Content-Type", "application/json")
 
 	id, data, err := api.validateProviderConfig(req)
 	if err != nil {
 		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprint(rw, err)
+		newErr := ErrorResponse{
+			Code: http.StatusBadRequest,
+			Msg:  err.Error(),
+		}
+		fmt.Fprint(rw, toJson(newErr))
 		return
 
 	}
@@ -121,7 +151,11 @@ func (api *API) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
 	err = api.rs.Update(req.Context(), id, data)
 	if err != nil {
 		rw.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(rw, err)
+		newErr := ErrorResponse{
+			Code: http.StatusInternalServerError,
+			Msg:  err.Error(),
+		}
+		fmt.Fprint(rw, toJson(newErr))
 		return
 	}
 

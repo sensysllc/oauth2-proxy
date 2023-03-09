@@ -24,7 +24,7 @@ func NewLoader(opts *options.Options) (Loader, error) {
 	case "", "single": // empty value in case we're using legacy opts
 		return single.New(opts.Providers[0])
 	case "postgres":
-		return postgres.New(opts.PostgresLoader, opts.ProxyPrefix)
+		return postgres.New(*opts.ProviderLoader.PostgresLoader, opts.ProxyPrefix)
 	default:
 		return nil, fmt.Errorf("invalid tenant loader type '%s'", conf.Type)
 	}

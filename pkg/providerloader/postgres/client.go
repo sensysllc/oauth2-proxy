@@ -30,6 +30,7 @@ func (c *APIClient) CreateProviderConfig(ctx context.Context, opts *options.Prov
 		SetHeader("Content-Type", "application/json").
 		SetBody(opts).
 		SetContext(ctx).
+		SetError(&ErrorResponse{}).
 		Post(path)
 
 	if err != nil {
@@ -48,6 +49,7 @@ func (c *APIClient) UpdateProviderConfig(ctx context.Context, opts *options.Prov
 	resp, err := c.Client.R().
 		SetHeader("Content-Type", "application/json").
 		SetBody(opts).
+		SetError(&ErrorResponse{}).
 		SetContext(ctx).
 		Put(path)
 
@@ -68,6 +70,7 @@ func (c *APIClient) GetProviderConfig(ctx context.Context, id string) (*options.
 		SetResult(providerConf).
 		ForceContentType("application/json").
 		SetContext(ctx).
+		SetError(&ErrorResponse{}).
 		Get(path)
 
 	if err != nil {
@@ -85,6 +88,7 @@ func (c *APIClient) DeleteProviderConfig(ctx context.Context, id string) error {
 	path := c.BaseURL + "/provider" + "/" + id
 	resp, err := c.Client.R().
 		SetContext(ctx).
+		SetError(&ErrorResponse{}).
 		Delete(path)
 
 	if err != nil {
