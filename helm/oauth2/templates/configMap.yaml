@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth2-proxy-config
+  labels:
+    app: oauth2-proxy
+data:
+  alpha-config.yaml: |
+{{ toYaml .Values.alphaConfig | indent 4 }}

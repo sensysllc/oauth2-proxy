@@ -1,0 +1,161 @@
+replicaCount: 1
+auth: false
+
+image:
+  repository: intechww-docker-local.jfrog.io/oauth2-proxy
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ''
+
+deploymentAnnotations: {}
+
+resources:
+  requests:
+    memory: ""
+    cpu: ""
+  limits:
+    memory: ""
+    cpu: ""
+
+
+serviceAccount:
+  tokenExpiration: 3600
+
+imagePullSecret: "regcred"
+startupDelay: 1s
+startupDelay_sec: 1
+
+deployment:
+  full: false
+  release:
+    enabled: true
+
+env:
+  oauth2ProxyCookieSecret: "RnQ1bklZM1lSbHpmaGt2aU1jUWVvMnRFazdTd1FTQ1c="
+
+arguments: ["--cookie-name","oidc_token","--email-domain","*","--cookie-secure","false","--cookie-samesite","none","--cookie-expire","3m","--cookie-refresh" ,"30s","--silence-ping-logging","true","--reverse-proxy","true","--whitelist-domain","*.intechcmms.com", "--proxy-prefix", "/oauth"]
+
+
+alphaConfig:
+  injectRequestHeaders:
+  - name: X-Forwarded-Groups
+    values:
+    - claim: groups
+  - name: X-Forwarded-User
+    values:
+    - claim: user
+  - name: X-Forwarded-Email
+    values:
+    - claim: email
+  - name: X-Forwarded-Preferred-Username
+    values:
+    - claim: preferred_username
+  - name: X-Forwarded-Access-Token
+    values:
+    - claim: access_token
+  - name: Authorization
+    values:
+    - claim: id_token
+      prefix: 'Bearer '
+  injectResponseHeaders:
+  - name: X-Auth-Request-User
+    values:
+    - claim: user
+  - name: X-Auth-Request-Email
+    values:
+    - claim: email
+  - name: X-Auth-Request-Preferred-Username
+    values:
+    - claim: preferred_username
+  - name: X-Auth-Request-Groups
+    values:
+    - claim: groups
+  - name: X-Auth-Request-Access-Token
+    values:
+    - claim: access_token
+  - name: Authorization
+    values:
+    - claim: id_token
+      prefix: 'Bearer '
+  metricsServer:
+    BindAddress: ""
+    SecureBindAddress: ""
+    TLS: null
+  providers:
+  - id: iis200
+    provider: "keycloak"
+    clientID: cmms
+    clientSecret: "8347yc9n@4@R@Bpweu0r92"
+    loginURL: https://sso.dev.intechcmms.com/auth/realms/iis200/protocol/openid-connect/auth
+    profileURL: https://sso.dev.intechcmms.com/auth/realms/iis200/protocol/openid-connect/userinfo
+    validateURL: https://sso.dev.intechcmms.com/auth/realms/iis200/protocol/openid-connect/userinfo
+    scope: "openid email profile"  
+    loginURLParameters:
+    - default:
+      - force
+      name: approval_prompt
+    oidcConfig:
+      audienceClaims:
+      - aud
+      emailClaim: email
+      groupsClaim: groups
+      insecureAllowUnverifiedEmail: true
+      insecureSkipIssuerVerification: true
+      insecureSkipNonce: true
+      issuerURL: https://sso.dev.intechcmms.com/auth/realms/iis200
+      jwksURL: https://sso.dev.intechcmms.com/auth/realms/iis200/protocol/openid-connect/certs
+      skipDiscovery: true
+      userIDClaim: email
+    redeemURL: https://sso.dev.intechcmms.com/auth/realms/iis200/protocol/openid-connect/token
+  - id: demo110
+    provider: "keycloak"
+    clientID: cmms
+    clientSecret: "8347yc9n@4@R@Bpweu0r92"
+    loginURL: https://sso.dev.intechcmms.com/auth/realms/demo110/protocol/openid-connect/auth
+    profileURL: https://sso.dev.intechcmms.com/auth/realms/demo110/protocol/openid-connect/userinfo
+    validateURL: https://sso.dev.intechcmms.com/auth/realms/demo110/protocol/openid-connect/userinfo
+    scope: "openid email profile"  
+    loginURLParameters:
+    - default:
+      - force
+      name: approval_prompt
+    oidcConfig:
+      audienceClaims:
+      - aud
+      emailClaim: email
+      groupsClaim: groups
+      insecureAllowUnverifiedEmail: true
+      insecureSkipIssuerVerification: true
+      insecureSkipNonce: true
+      issuerURL: https://sso.dev.intechcmms.com/auth/realms/demo110
+      jwksURL: https://sso.dev.intechcmms.com/auth/realms/demo110/protocol/openid-connect/certs
+      skipDiscovery: true
+      userIDClaim: email
+    redeemURL: https://sso.dev.intechcmms.com/auth/realms/demo110/protocol/openid-connect/token
+  server:
+    BindAddress: 0.0.0.0:4180
+    SecureBindAddress: ""
+    TLS: null
+  tenantMatcher:
+    rules:
+      - source: "header"
+        header: "tenantid"
+        expr: "^[^.]*"
+        captureGroup: 0
+      - source: "host"
+        expr: "^[^.]*"
+        captureGroup: 0
+  providerLoader:
+    type: "config"
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: '*.intechcmms.com'
+      paths:
+        - path: /oauth(/|$)(.*)
+          pathType: Prefix
+  tls:
+    - hosts:
+        - '*.intechcmms.com'

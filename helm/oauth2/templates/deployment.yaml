@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  labels:
+    app: oauth2-proxy
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy
+        instance: oauth2-proxy.{{.Release.Name}}.{{.Release.Revision}}
+    spec:
+      enableServiceLinks: true
+      imagePullSecrets:
+      - name: {{ .Values.imagePullSecret }}
+      containers:
+      - name: oauth2-proxy
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+          - "--alpha-config"
+          - "/conf/alpha/alpha-config.yaml"
+        {{  range .Values.arguments }}
+          - {{ . | quote }}
+        {{ end }}
+        env:
+        {{- range $key, $value := .Values.env }}
+        - name: {{ $key | snakecase | upper }}
+          value: {{ $value | quote }}
+        {{ end }}
+        ports:
+          - containerPort: 4180
+        volumeMounts:
+          - name: config
+            mountPath: /conf/alpha
+            readOnly: true
+        resources:
+          requests:
+            memory: {{ default "128Mi" .Values.resources.requests.memory }}
+            cpu: {{ default "0.1" .Values.resources.requests.cpu }}
+          limits:
+            memory: {{ default "128Mi" .Values.resources.limits.memory }}
+            cpu: {{ default "0.1" .Values.resources.limits.cpu }}
+      volumes:
+      - name: config
+        configMap:
+          name: oauth2-proxy-config
