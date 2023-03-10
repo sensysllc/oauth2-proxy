@@ -65,7 +65,7 @@ func TestCreateHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/oauth/provider", bytes.NewBuffer(body))
 			w := httptest.NewRecorder()
 			api := API{
-				rs: fakeConfigStore{
+				configStore: fakeConfigStore{
 					CreateFunc: tt.mockCreate,
 				},
 				conf: options.API{
@@ -118,7 +118,7 @@ func TestGetHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/oauth/provider/"+tt.id, nil)
 			w := httptest.NewRecorder()
 			api := API{
-				rs: fakeConfigStore{
+				configStore: fakeConfigStore{
 					GetFunc: tt.mockGet,
 				},
 				conf: options.API{
@@ -171,7 +171,7 @@ func TestDeleteHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodDelete, "/oauth/provider/"+tt.id, nil)
 			w := httptest.NewRecorder()
 			api := API{
-				rs: fakeConfigStore{
+				configStore: fakeConfigStore{
 					DeleteFunc: tt.mockDelete,
 				},
 				conf: options.API{
@@ -244,7 +244,7 @@ func TestUpdateHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPut, "/oauth/provider", bytes.NewBuffer(body))
 			w := httptest.NewRecorder()
 			api := API{
-				rs: fakeConfigStore{
+				configStore: fakeConfigStore{
 					UpdateFunc: tt.mockUpdate,
 				},
 				conf: options.API{

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
@@ -15,20 +16,20 @@ import (
 )
 
 type API struct {
-	rs   ConfigStore
-	conf options.API
+	configStore ConfigStore
+	conf        options.API
 }
 
 type ErrorResponse struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
+	Code    int    `json:"code"`
+	Message string `json:"msg"`
 }
 
 func NewAPI(conf options.API, rs *RedisStore, proxyPrefix string) error {
 	r := mux.NewRouter()
 	api := API{
-		rs:   rs,
-		conf: conf,
+		configStore: rs,
+		conf:        conf,
 	}
 	var pathPrefix = proxyPrefix
 
@@ -59,32 +60,20 @@ func NewAPI(conf options.API, rs *RedisStore, proxyPrefix string) error {
 
 }
 
-func toJson(v any) string {
-	j, _ := json.Marshal(v)
-	return string(j)
-}
-
 func (api *API) CreateHandler(rw http.ResponseWriter, req *http.Request) {
-	rw.Header().Set("Content-Type", "application/json")
 	id, data, err := api.validateProviderConfig(req)
 	if err != nil {
-		rw.WriteHeader(http.StatusBadRequest)
-		newErr := ErrorResponse{
-			Code: http.StatusBadRequest,
-			Msg:  err.Error(),
-		}
-		fmt.Fprint(rw, toJson(newErr))
+		writeErrorResponse(rw, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	err = api.rs.Create(req.Context(), id, data)
+	err = api.configStore.Create(req.Context(), id, data)
 	if err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		newErr := ErrorResponse{
-			Code: http.StatusInternalServerError,
-			Msg:  err.Error(),
+		if strings.Contains(err.Error(), "duplicate key") {
+			writeErrorResponse(rw, http.StatusConflict, err.Error())
+			return
 		}
-		fmt.Fprint(rw, toJson(newErr))
+		writeErrorResponse(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -92,41 +81,31 @@ func (api *API) CreateHandler(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (api *API) GetHandler(rw http.ResponseWriter, req *http.Request) {
-	rw.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(req)
-
 	id := vars["id"]
 
-	providerConf, err := api.rs.Get(req.Context(), id)
+	providerConf, err := api.configStore.Get(req.Context(), id)
 	if err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		newErr := ErrorResponse{
-			Code: http.StatusInternalServerError,
-			Msg:  err.Error(),
+		if strings.Contains(err.Error(), "not found") {
+			writeErrorResponse(rw, http.StatusNotFound, err.Error())
+			return
 		}
-		fmt.Fprint(rw, toJson(newErr))
+		writeErrorResponse(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	rw.WriteHeader(http.StatusOK)
+	rw.Header().Set("Content-Type", "application/json")
 	fmt.Fprint(rw, providerConf)
 }
 
 func (api *API) DeleteHandler(rw http.ResponseWriter, req *http.Request) {
-	rw.Header().Set("Content-Type", "application/json")
-
 	vars := mux.Vars(req)
-
 	id := vars["id"]
 
-	err := api.rs.Delete(req.Context(), id)
+	err := api.configStore.Delete(req.Context(), id)
 	if err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		newErr := ErrorResponse{
-			Code: http.StatusInternalServerError,
-			Msg:  err.Error(),
-		}
-		fmt.Fprint(rw, toJson(newErr))
+		writeErrorResponse(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -134,28 +113,20 @@ func (api *API) DeleteHandler(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (api *API) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
-	rw.Header().Set("Content-Type", "application/json")
-
 	id, data, err := api.validateProviderConfig(req)
 	if err != nil {
-		rw.WriteHeader(http.StatusBadRequest)
-		newErr := ErrorResponse{
-			Code: http.StatusBadRequest,
-			Msg:  err.Error(),
-		}
-		fmt.Fprint(rw, toJson(newErr))
+		writeErrorResponse(rw, http.StatusBadRequest, err.Error())
 		return
 
 	}
 
-	err = api.rs.Update(req.Context(), id, data)
+	err = api.configStore.Update(req.Context(), id, data)
 	if err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		newErr := ErrorResponse{
-			Code: http.StatusInternalServerError,
-			Msg:  err.Error(),
+		if strings.Contains(err.Error(), "not exist") {
+			writeErrorResponse(rw, http.StatusNotFound, err.Error())
+			return
 		}
-		fmt.Fprint(rw, toJson(newErr))
+		writeErrorResponse(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -195,4 +166,16 @@ func (api *API) validateProviderConfig(req *http.Request) (string, []byte, error
 	}
 
 	return providerConf.ID, data, nil
+}
+
+func writeErrorResponse(rw http.ResponseWriter, code int, message string) {
+	rw.Header().Set("Content-Type", "application/json")
+	rw.WriteHeader(code)
+	newErr := ErrorResponse{
+		Code:    code,
+		Message: message,
+	}
+
+	j, _ := json.Marshal(newErr)
+	fmt.Fprint(rw, string(j))
 }

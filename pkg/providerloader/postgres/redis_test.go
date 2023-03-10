@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/go-redis/redis/v9"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/sessions/redis"
 )
 
 func TestRedisStore_Create(t *testing.T) {
@@ -49,9 +49,9 @@ func TestRedisStore_Create(t *testing.T) {
 	}
 
 	s := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     s.Addr(),
-		Password: "",
+	rdb, _ := redis.NewRedisClient(options.RedisStoreOptions{
+		ConnectionURL: "redis://" + s.Addr(),
+		Password:      "",
 	})
 
 	for _, test := range tests {
@@ -117,9 +117,9 @@ func TestRedisStore_Update(t *testing.T) {
 	}
 
 	s := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     s.Addr(),
-		Password: "",
+	rdb, _ := redis.NewRedisClient(options.RedisStoreOptions{
+		ConnectionURL: "redis://" + s.Addr(),
+		Password:      "",
 	})
 
 	for _, test := range tests {
@@ -203,9 +203,9 @@ func TestRedisStore_Get(t *testing.T) {
 
 	s := miniredis.RunT(t)
 
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     s.Addr(),
-		Password: "",
+	rdb, _ := redis.NewRedisClient(options.RedisStoreOptions{
+		ConnectionURL: "redis://" + s.Addr(),
+		Password:      "",
 	})
 
 	for _, test := range tests {
@@ -271,9 +271,9 @@ func TestRedisStore_Delete(t *testing.T) {
 	}
 
 	s := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     s.Addr(),
-		Password: "",
+	rdb, _ := redis.NewRedisClient(options.RedisStoreOptions{
+		ConnectionURL: "redis://" + s.Addr(),
+		Password:      "",
 	})
 
 	for _, test := range tests {

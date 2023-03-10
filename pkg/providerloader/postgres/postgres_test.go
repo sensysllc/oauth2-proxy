@@ -26,7 +26,6 @@ func NewMock() (sqlmock.Sqlmock, *PtgStore) {
 		Schema:         "oauth",
 		User:           "",
 		Password:       "",
-		Timeout:        1000000000,
 		MaxConnections: 5,
 	}
 

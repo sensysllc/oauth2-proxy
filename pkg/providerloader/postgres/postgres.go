@@ -16,9 +16,8 @@ type PtgStore struct {
 }
 
 type provider struct {
-	ID           string `gorm:"type:VARCHAR(255);primarykey"`
+	ID           string `gorm:"embedded"`
 	ProviderConf datatypes.JSON
-	// ProviderConf options.Provider `json:"providerConf"`
 }
 
 func NewPostgresStore(c options.Postgres) (*PtgStore, error) {
@@ -52,8 +51,6 @@ func NewPostgresStore(c options.Postgres) (*PtgStore, error) {
 }
 
 func (ps *PtgStore) Create(ctx context.Context, id string, providerconf []byte) error {
-	ctx, cancel := context.WithTimeout(ctx, ps.configuration.Timeout)
-	defer cancel()
 
 	provider := provider{ID: id, ProviderConf: providerconf}
 	res := ps.db.WithContext(ctx).Create(&provider)
@@ -68,8 +65,6 @@ func (ps *PtgStore) Create(ctx context.Context, id string, providerconf []byte) 
 }
 
 func (ps *PtgStore) Update(ctx context.Context, id string, providerconf []byte) error {
-	ctx, cancel := context.WithTimeout(ctx, ps.configuration.Timeout)
-	defer cancel()
 
 	res := ps.db.WithContext(ctx).Model(&provider{}).Where("id = ?", id).Update("provider_conf", providerconf)
 	if res.Error != nil {
@@ -83,9 +78,6 @@ func (ps *PtgStore) Update(ctx context.Context, id string, providerconf []byte) 
 
 func (ps *PtgStore) Get(ctx context.Context, id string) (string, error) {
 
-	ctx, cancel := context.WithTimeout(ctx, ps.configuration.Timeout)
-	defer cancel()
-
 	var prov = &provider{}
 	prov.ID = id
 	res := ps.db.WithContext(ctx).First(prov)
@@ -96,8 +88,6 @@ func (ps *PtgStore) Get(ctx context.Context, id string) (string, error) {
 }
 
 func (ps *PtgStore) Delete(ctx context.Context, id string) error {
-	ctx, cancel := context.WithTimeout(ctx, ps.configuration.Timeout)
-	defer cancel()
 
 	res := ps.db.WithContext(ctx).Where("id = ?", id).Delete(&provider{})
 	if res.Error != nil {

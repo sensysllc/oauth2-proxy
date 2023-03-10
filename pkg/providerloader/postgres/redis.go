@@ -4,22 +4,25 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-redis/redis/v9"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/logger"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/sessions/redis"
 )
 
 type RedisStore struct {
 	configStore  ConfigStore
 	redisOptions *options.Redis
-	rdb          *redis.Client
+	rdb          redis.Client
 }
 
 func NewRedisStore(opts options.Redis, configStore ConfigStore) (*RedisStore, error) {
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     opts.Addr,
-		Password: opts.Password,
-		DB:       opts.DB,
+	rdb, err := redis.NewRedisClient(options.RedisStoreOptions{
+		ConnectionURL: "redis://" + opts.Addr,
+		Password:      opts.Password,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	rs := &RedisStore{
 		configStore:  configStore,
@@ -38,13 +41,13 @@ func (rs *RedisStore) Create(ctx context.Context, id string, providerConfig []by
 	// create in postgres
 	err := rs.configStore.Create(ctx, id, providerConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create in config store: %v", err)
 	}
 
 	// then set(create) in redis store
-	err = rs.rdb.Set(ctx, rs.key(id), providerConfig, rs.redisOptions.Expiry).Err()
+	err = rs.rdb.Set(ctx, rs.key(id), providerConfig, rs.redisOptions.Expiry)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create in redis store: %v", err)
 	}
 	return nil
 }
@@ -53,20 +56,20 @@ func (rs *RedisStore) Update(ctx context.Context, id string, providerconf []byte
 	// update in postgres
 	err := rs.configStore.Update(ctx, id, providerconf)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update in config store: %v", err)
 	}
 
 	// update in redis store
-	err = rs.rdb.Set(ctx, rs.key(id), providerconf, rs.redisOptions.Expiry).Err()
+	err = rs.rdb.Set(ctx, rs.key(id), providerconf, rs.redisOptions.Expiry)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update in redis store: %v", err)
 	}
 	return nil
 }
 
 func (rs *RedisStore) Get(ctx context.Context, id string) (string, error) {
 	// check if redis store has key value pair
-	val, err := rs.rdb.Get(ctx, rs.key(id)).Result()
+	val, err := rs.rdb.Get(ctx, rs.key(id))
 	if err != nil {
 		// check in postgres store
 		val, err := rs.configStore.Get(ctx, id)
@@ -75,27 +78,27 @@ func (rs *RedisStore) Get(ctx context.Context, id string) (string, error) {
 		}
 
 		// set or create entry in redis store
-		err = rs.rdb.Set(ctx, rs.key(id), val, rs.redisOptions.Expiry).Err()
+		err = rs.rdb.Set(ctx, rs.key(id), []byte(val), rs.redisOptions.Expiry)
 		if err != nil {
-			return "", fmt.Errorf("could not create entry in redis store: %v", err)
+			logger.Errorf("could not create entry in redis store: %v", err)
 		}
 		return val, nil
 	}
 
-	return val, nil
+	return string(val), nil
 }
 
 func (rs *RedisStore) Delete(ctx context.Context, id string) error {
 	// delete in postgres store
 	err := rs.configStore.Delete(ctx, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to delete in config store: %v", err)
 	}
 
 	// delete in redis store
-	err = rs.rdb.Del(ctx, rs.key(id)).Err()
+	err = rs.rdb.Del(ctx, rs.key(id))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create in redis store: %v", err)
 	}
 	return nil
 }
