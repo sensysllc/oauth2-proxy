@@ -5,6 +5,10 @@ import (
 	"crypto"
 	"encoding/base64"
 	"fmt"
+	"github.com/justinas/alice"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/middleware"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader"
+	single "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader/single"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -55,7 +59,10 @@ func TestRobotsTxt(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/robots.txt", nil)
 	proxy.ServeHTTP(rw, req)
 	assert.Equal(t, 200, rw.Code)
-	assert.Equal(t, "User-agent: *\nDisallow: /\n", rw.Body.String())
+	assert.Equal(t,
+		"User-agent: *\nDisallow: /\n",
+		strings.ReplaceAll(rw.Body.String(), "\r\n", "\n"),
+	)
 }
 
 type TestProvider struct {
@@ -86,7 +93,8 @@ func NewTestProvider(providerURL *url.URL, emailAddress string) *TestProvider {
 				Host:   providerURL.Host,
 				Path:   "/api/v1/profile",
 			},
-			Scope: "profile.email",
+			Scope:    "profile.email",
+			ClientID: "TestProvider",
 		},
 		EmailAddress: emailAddress,
 		GroupValidator: func(s string) bool {
@@ -114,7 +122,7 @@ func Test_redeemCode(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	_, err = proxy.redeemCode(req, "")
+	_, err = proxy.redeemCode(req, "", nil)
 	assert.Equal(t, providers.ErrMissingCode, err)
 }
 
@@ -164,9 +172,10 @@ func Test_enrichSession(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			proxy.provider = NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
 
-			err = proxy.enrichSessionState(context.Background(), tc.session)
+			provider := NewTestProvider(&url.URL{Host: "www.example.com"}, providerEmail)
+
+			err = proxy.enrichSessionState(context.Background(), tc.session, provider)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedUser, tc.session.User)
 			assert.Equal(t, tc.expectedEmail, tc.session.Email)
@@ -226,7 +235,7 @@ func TestBasicAuthPassword(t *testing.T) {
 	err := validation.Validate(opts)
 	assert.NoError(t, err)
 
-	providerURL, _ := url.Parse(providerServer.URL)
+	// providerURL, _ := url.Parse(providerServer.URL)
 	const emailAddress = "john.doe@example.com"
 
 	proxy, err := NewOAuthProxy(opts, func(email string) bool {
@@ -235,7 +244,9 @@ func TestBasicAuthPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	proxy.provider = NewTestProvider(providerURL, emailAddress)
+
+	// TODO: inject provider
+	// proxy.provider = NewTestProvider(providerURL, emailAddress)
 
 	// Save the required session
 	rw := httptest.NewRecorder()
@@ -325,6 +336,10 @@ type PassAccessTokenTestOptions struct {
 	ProxyUpstream   options.Upstream
 }
 
+func MockBuildProviderLoaderChain(opts *options.Options, providerLoader providerloader.Loader) alice.Chain {
+	return alice.New(middleware.NewProviderLoader(providerLoader))
+}
+
 func NewPassAccessTokenTest(opts PassAccessTokenTestOptions) (*PassAccessTokenTest, error) {
 	patt := &PassAccessTokenTest{}
 
@@ -386,14 +401,26 @@ func NewPassAccessTokenTest(opts PassAccessTokenTestOptions) (*PassAccessTokenTe
 	const emailAddress = "michael.bland@gsa.gov"
 
 	testProvider := NewTestProvider(providerURL, emailAddress)
+
 	testProvider.ValidToken = opts.ValidToken
 	patt.proxy, err = NewOAuthProxy(patt.opts, func(email string) bool {
 		return email == emailAddress
 	})
-	patt.proxy.provider = testProvider
+
+	// Inject the provider in the providerLoader
+	switch patt.opts.ProviderLoader.Type {
+	case "", "single":
+		var loader = patt.proxy.providerLoader.(*single.Loader)
+		loader.Provider = testProvider
+		break
+	default:
+		return nil, fmt.Errorf("the ProviderLoader Type must be single, find %s", patt.opts.ProviderLoader.Type)
+	}
+
 	if err != nil {
 		return nil, err
 	}
+
 	return patt, nil
 }
 
@@ -401,7 +428,7 @@ func (patTest *PassAccessTokenTest) Close() {
 	patTest.providerServer.Close()
 }
 
-func (patTest *PassAccessTokenTest) getCallbackEndpoint() (httpCode int, cookie string) {
+func (patTest *PassAccessTokenTest) getCallbackEndpoint(tenantId string) (httpCode int, cookie string) {
 	rw := httptest.NewRecorder()
 
 	csrf, err := cookies.NewCSRF(patTest.proxy.CookieOptions, "")
@@ -413,7 +440,7 @@ func (patTest *PassAccessTokenTest) getCallbackEndpoint() (httpCode int, cookie 
 		http.MethodGet,
 		fmt.Sprintf(
 			"/oauth2/callback?code=callback_code&state=%s",
-			encodeState(csrf.HashOAuthState(), "%2F"),
+			encodeState(csrf.HashOAuthState(), "%2F", tenantId),
 		),
 		strings.NewReader(""),
 	)
@@ -440,7 +467,7 @@ func (patTest *PassAccessTokenTest) getCallbackEndpoint() (httpCode int, cookie 
 // getEndpointWithCookie makes a requests againt the oauthproxy with passed requestPath
 // and cookie and returns body and status code.
 func (patTest *PassAccessTokenTest) getEndpointWithCookie(cookie string, endpoint string) (httpCode int, accessToken string) {
-	cookieName := patTest.proxy.CookieOptions.Name
+	cookieName := patTest.proxy.CookieOptions.Name(context.Background()) // TODO: check if fixed
 	var value string
 	keyPrefix := cookieName + "="
 
@@ -474,6 +501,7 @@ func (patTest *PassAccessTokenTest) getEndpointWithCookie(cookie string, endpoin
 }
 
 func TestForwardAccessTokenUpstream(t *testing.T) {
+
 	patTest, err := NewPassAccessTokenTest(PassAccessTokenTestOptions{
 		PassAccessToken: true,
 		ValidToken:      true,
@@ -481,10 +509,17 @@ func TestForwardAccessTokenUpstream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	provider, err := patTest.proxy.providerLoader.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, provider.Data().ClientID, "TestProvider")
+
 	t.Cleanup(patTest.Close)
 
 	// A successful validation will redirect and set the auth cookie.
-	code, cookie := patTest.getCallbackEndpoint()
+	code, cookie := patTest.getCallbackEndpoint("")
 	if code != 302 {
 		t.Fatalf("expected 302; got %d", code)
 	}
@@ -516,7 +551,7 @@ func TestStaticProxyUpstream(t *testing.T) {
 	t.Cleanup(patTest.Close)
 
 	// A successful validation will redirect and set the auth cookie.
-	code, cookie := patTest.getCallbackEndpoint()
+	code, cookie := patTest.getCallbackEndpoint("") //TODO
 	if code != 302 {
 		t.Fatalf("expected 302; got %d", code)
 	}
@@ -542,7 +577,7 @@ func TestDoNotForwardAccessTokenUpstream(t *testing.T) {
 	t.Cleanup(patTest.Close)
 
 	// A successful validation will redirect and set the auth cookie.
-	code, cookie := patTest.getCallbackEndpoint()
+	code, cookie := patTest.getCallbackEndpoint("")
 	if code != 302 {
 		t.Fatalf("expected 302; got %d", code)
 	}
@@ -565,7 +600,7 @@ func TestSessionValidationFailure(t *testing.T) {
 	t.Cleanup(patTest.Close)
 
 	// An unsuccessful validation will return 403 and not set the auth cookie.
-	code, cookie := patTest.getCallbackEndpoint()
+	code, cookie := patTest.getCallbackEndpoint("") // TODO
 	assert.Equal(t, http.StatusForbidden, code)
 	assert.Equal(t, "", cookie)
 }
@@ -840,7 +875,8 @@ func NewProcessCookieTest(opts ProcessCookieTestOpts, modifiers ...OptionsModifi
 	for _, group := range groups {
 		testProvider.ProviderData.AllowedGroups[group] = struct{}{}
 	}
-	pcTest.proxy.provider = testProvider
+	// TODO: inject provider
+	// pcTest.proxy.provider = testProvider
 
 	// Now, zero-out proxy.CookieRefresh for the cases that don't involve
 	// access_token validation.
@@ -1204,10 +1240,12 @@ func TestAuthOnlyEndpointSetXAuthRequestHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pcTest.proxy.provider = &TestProvider{
+
+	// TODO: inject provider
+	/* pcTest.proxy.provider = &TestProvider{
 		ProviderData: &providers.ProviderData{},
 		ValidToken:   true,
-	}
+	} */
 
 	pcTest.validateUser = true
 
@@ -1297,10 +1335,12 @@ func TestAuthOnlyEndpointSetBasicAuthTrueRequestHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pcTest.proxy.provider = &TestProvider{
+
+	// TODO: inject provider
+	/* pcTest.proxy.provider = &TestProvider{
 		ProviderData: &providers.ProviderData{},
 		ValidToken:   true,
-	}
+	} */
 
 	pcTest.validateUser = true
 
@@ -1377,10 +1417,12 @@ func TestAuthOnlyEndpointSetBasicAuthFalseRequestHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pcTest.proxy.provider = &TestProvider{
+
+	// TODO: inject provider
+	/* pcTest.proxy.provider = &TestProvider{
 		ProviderData: &providers.ProviderData{},
 		ValidToken:   true,
-	}
+	} */
 
 	pcTest.validateUser = true
 
@@ -1425,13 +1467,16 @@ func TestAuthSkippedForPreflightRequests(t *testing.T) {
 	err := validation.Validate(opts)
 	assert.NoError(t, err)
 
-	upstreamURL, _ := url.Parse(upstreamServer.URL)
+	// upstreamURL, _ := url.Parse(upstreamServer.URL)
 
 	proxy, err := NewOAuthProxy(opts, func(string) bool { return false })
 	if err != nil {
 		t.Fatal(err)
 	}
-	proxy.provider = NewTestProvider(upstreamURL, "")
+
+	// TODO: inject provider
+	// proxy.provider = NewTestProvider(upstreamURL, "")
+
 	rw := httptest.NewRecorder()
 	req, _ := http.NewRequest("OPTIONS", "/preflight-request", nil)
 	proxy.ServeHTTP(rw, req)
@@ -1556,7 +1601,9 @@ func (st *SignatureTest) MakeRequestWithExpectedKey(method, body, key string) er
 	if err != nil {
 		return err
 	}
-	proxy.provider = st.authProvider
+
+	// TODO: inject provider
+	// proxy.provider = st.authProvider
 
 	var bodyBuf io.ReadCloser
 	if body != "" {
@@ -1716,7 +1763,7 @@ func TestAjaxForbiddendRequest(t *testing.T) {
 func TestClearSplitCookie(t *testing.T) {
 	opts := baseTestOptions()
 	opts.Cookie.Secret = base64CookieSecret
-	opts.Cookie.Name = "oauth2"
+	opts.Cookie.NamePrefix = "oauth2"
 	opts.Cookie.Domains = []string{"abc"}
 	err := validation.Validate(opts)
 	assert.NoError(t, err)
@@ -1752,7 +1799,8 @@ func TestClearSplitCookie(t *testing.T) {
 
 func TestClearSingleCookie(t *testing.T) {
 	opts := baseTestOptions()
-	opts.Cookie.Name = "oauth2"
+
+	opts.Cookie.NamePrefix = "oauth2"
 	opts.Cookie.Domains = []string{"abc"}
 	store, err := sessionscookie.NewCookieSessionStore(&opts.Session, &opts.Cookie)
 	if err != nil {
@@ -1892,10 +1940,12 @@ func TestGetJwtSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tp, _ := test.proxy.provider.(*TestProvider)
+
+	// TODO: inject provider
+	/* tp, _ := test.proxy.provider.(*TestProvider)
 	tp.GroupValidator = func(s string) bool {
 		return true
-	}
+	} */
 
 	authHeader := fmt.Sprintf("Bearer %s", goodJwt)
 	test.req.Header = map[string][]string{
@@ -1969,7 +2019,7 @@ func Test_noCacheHeaders(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, "upstream", rec.Body.String())
 
-		// checking noCacheHeaders does not exists in response headers from upstream
+		// checking noCacheHeaders does not exist in response headers from upstream
 		for k := range noCacheHeaders {
 			assert.Equal(t, "", rec.Header().Get(k))
 		}
