@@ -3,6 +3,8 @@ package middleware
 import (
 	"errors"
 	"fmt"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader/util"
 	"net/http"
 	"regexp"
 
@@ -15,10 +17,11 @@ import (
 
 const jwtRegexFormat = `^ey[IJ][a-zA-Z0-9_-]*\.ey[IJ][a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+$`
 
-func NewJwtSessionLoader(sessionLoaders []middlewareapi.TokenToSessionFunc) alice.Constructor {
+func NewJwtSessionLoader(sessionLoaders []middlewareapi.TokenToSessionFunc, providerLoader providerloader.Loader) alice.Constructor {
 	js := &jwtSessionLoader{
 		jwtRegex:       regexp.MustCompile(jwtRegexFormat),
 		sessionLoaders: sessionLoaders,
+		providerLoader: providerLoader,
 	}
 	return js.loadSession
 }
@@ -28,6 +31,7 @@ func NewJwtSessionLoader(sessionLoaders []middlewareapi.TokenToSessionFunc) alic
 type jwtSessionLoader struct {
 	jwtRegex       *regexp.Regexp
 	sessionLoaders []middlewareapi.TokenToSessionFunc
+	providerLoader providerloader.Loader
 }
 
 // loadSession attempts to load a session from a JWT stored in an Authorization
@@ -49,6 +53,20 @@ func (j *jwtSessionLoader) loadSession(next http.Handler) http.Handler {
 		session, err := j.getJwtSession(req)
 		if err != nil {
 			logger.Errorf("Error retrieving session from token in Authorization header: %v", err)
+		} else if session != nil {
+			// If we were able to load a session from the JWT
+			// it is most likely the provider used has been the one
+			// linked with the issuerURL in the iss claim of the JWT.
+			// Therefore, we need to add the provider to the context.
+			provider, err := j.providerLoader.Load(session.TenantId)
+			if err != nil {
+				logger.Error(fmt.Sprintf("unable to load provider, id='%s': %s", session.TenantId, err.Error()))
+				rw.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			req = req.WithContext(
+				util.AppendToContext(req.Context(), provider),
+			)
 		}
 
 		// Add the session to the scope if it was found

@@ -12,6 +12,7 @@ import (
 type Loader interface {
 	// id is provider id, which should be same as tenantId
 	Load(id string) (providers.Provider, error)
+	GetByIssuerURL(url string) (providers.Provider, error)
 }
 
 // factory function for types.Loader interface
@@ -19,7 +20,7 @@ func NewLoader(opts *options.Options) (Loader, error) {
 	conf := opts.ProviderLoader
 	switch conf.Type {
 	case "config":
-		return configloader.New(opts.Providers)
+		return configloader.New(opts.Providers, conf.DefaultProvider)
 	case "", "single": // empty value in case we're using legacy opts
 		return single.New(opts.Providers[0])
 	default:

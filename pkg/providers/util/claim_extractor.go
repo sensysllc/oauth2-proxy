@@ -24,6 +24,19 @@ type ClaimExtractor interface {
 	GetClaimInto(claim string, dst interface{}) (bool, error)
 }
 
+func TokenToJson(token string) (*simplejson.Json, error) {
+	payload, err := parseJWT(token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse ID Token: %v", err)
+	}
+
+	tokenClaims, err := simplejson.NewJson(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse ID Token payload: %v", err)
+	}
+	return tokenClaims, nil
+}
+
 // NewClaimExtractor constructs a new ClaimExtractor from the raw ID Token.
 // If needed, it will use the profile URL to look up a claim if it isn't present
 // within the ID Token.

@@ -38,6 +38,7 @@ import (
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/ip"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/logger"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/middleware"
+	claimutil "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providers/util"
 	requestutil "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/requests/util"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/sessions"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/upstream"
@@ -154,10 +155,11 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 	}
 
 	if opts.SkipJwtBearerTokens {
-		logger.Printf("Skipping JWT tokens from configured OIDC issuer: %q", opts.Providers[0].OIDCConfig.IssuerURL)
-		for _, issuer := range opts.ExtraJwtIssuers {
-			logger.Printf("Skipping JWT tokens from extra JWT issuer: %q", issuer)
-		}
+		logger.Printf("Skipping JWT tokens option is enabled. When a JWT token is received, the iss claim will be used, it must match one of the providers issuerURL.")
+	}
+
+	if opts.ProviderLoader.Type != "config" && len(opts.Providers) > 1 {
+		logger.Printf("The ProviderLoader config is set to single while many providers have been configured, in this configuration only the first one defined will be use.")
 	}
 	redirectURL := opts.GetRedirectURL()
 	if redirectURL.Path == "" {
@@ -209,7 +211,7 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 		return nil, fmt.Errorf("could not build pre-auth chain: %v", err)
 	}
 
-	sessionChain := buildSessionChain(opts, sessionStore, basicAuthValidator)
+	sessionChain := buildSessionChain(opts, sessionStore, basicAuthValidator, providerLoader)
 	headersChain, err := buildHeadersChain(opts)
 	if err != nil {
 		return nil, fmt.Errorf("could not build headers chain: %v", err)
@@ -326,7 +328,7 @@ func (p *OAuthProxy) buildServeMux(proxyPrefix string) {
 
 	// The authonly path should be registered separately to prevent it from getting no-cache headers.
 	// We do this to allow users to have a short cache (via nginx) of the response to reduce the
-	// likelihood of multiple reuests trying to referesh sessions simultaneously.
+	// likelihood of multiple requests trying to refresh sessions simultaneously.
 	r.Path(proxyPrefix + authOnlyPath).Handler(p.sessionChain.ThenFunc(p.AuthOnly))
 	// This will register all of the paths under the proxy prefix, except the auth only path so that no cache headers
 	// are not applied.
@@ -401,26 +403,38 @@ func buildProviderLoaderChain(opts *options.Options, providerLoader providerload
 	return alice.New(middleware.NewProviderLoader(providerLoader))
 }
 
-func buildSessionChain(opts *options.Options, sessionStore sessionsapi.SessionStore, validator basic.Validator) alice.Chain {
+func buildSessionChain(
+	opts *options.Options,
+	sessionStore sessionsapi.SessionStore,
+	validator basic.Validator,
+	providerLoader providerloader.Loader,
+) alice.Chain {
 	chain := alice.New()
 
 	if opts.SkipJwtBearerTokens {
 		sessionLoaders := []middlewareapi.TokenToSessionFunc{
 			func(ctx context.Context, token string) (*sessionsapi.SessionState, error) {
-				provider := providerLoaderUtil.FromContext(ctx)
-				if provider == nil {
-					return nil, fmt.Errorf("provider not found")
+				// We need to parse the given token
+				jsonToken, err := claimutil.TokenToJson(token)
+				if err != nil {
+					return nil, err
 				}
+				// Then we get the issuer of the JWT token
+				issuer, err := jsonToken.Get("iss").String()
+				if err != nil {
+					return nil, fmt.Errorf("could not get the issuer of the token: %s", err.Error())
+				}
+				// We try to get the provider based on the iss claim
+				provider, err := providerLoader.GetByIssuerURL(issuer)
+				if err != nil {
+					return nil, fmt.Errorf("no provider could be found for the issuerURL %s: %s", issuer, err.Error())
+				}
+				// If the provider is valid we create a session from this token
 				return provider.CreateSessionFromToken(ctx, token)
 			},
 		}
 
-		for _, verifier := range opts.GetJWTBearerVerifiers() {
-			sessionLoaders = append(sessionLoaders,
-				middlewareapi.CreateTokenToSessionFunc(verifier.Verify))
-		}
-
-		chain = chain.Append(middleware.NewJwtSessionLoader(sessionLoaders))
+		chain = chain.Append(middleware.NewJwtSessionLoader(sessionLoaders, providerLoader))
 	}
 
 	if validator != nil {
