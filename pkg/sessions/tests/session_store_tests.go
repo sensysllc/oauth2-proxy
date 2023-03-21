@@ -145,7 +145,7 @@ func CheckCookieOptions(in *testInput) {
 
 		It("have the correct name set", func() {
 			if len(cookies) == 1 {
-				Expect(cookies[0].Name).To(Equal(in.cookieOpts.Name))
+				Expect(cookies[0].Name).To(Equal(in.cookieOpts.Name(nil)))
 			} else {
 				for _, cookie := range cookies {
 					Expect(cookie.Name).To(ContainSubstring(in.cookieOpts.NamePrefix))
