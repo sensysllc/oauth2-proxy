@@ -23,7 +23,7 @@ var _ = Describe("CSRF Cookie with non-fixed name Tests", func() {
 
 	BeforeEach(func() {
 		cookieOpts = &options.Cookie{
-			Name:           cookieName,
+			NamePrefix:     cookieName,
 			Secret:         cookieSecret,
 			Domains:        []string{cookieDomain},
 			Path:           cookiePath,
@@ -93,11 +93,11 @@ var _ = Describe("CSRF Cookie with non-fixed name Tests", func() {
 			privateCSRF.OAuthState = []byte(csrfState)
 			privateCSRF.OIDCNonce = []byte(csrfNonce)
 
-			encoded, err := privateCSRF.encodeCookie()
+			encoded, err := privateCSRF.encodeCookie(nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			cookie := &http.Cookie{
-				Name:  privateCSRF.cookieName(),
+				Name:  privateCSRF.cookieName(nil),
 				Value: encoded,
 			}
 			decoded, err := decodeCSRFCookie(cookie, cookieOpts)
@@ -109,11 +109,11 @@ var _ = Describe("CSRF Cookie with non-fixed name Tests", func() {
 		})
 
 		It("signs the encoded cookie value", func() {
-			encoded, err := privateCSRF.encodeCookie()
+			encoded, err := privateCSRF.encodeCookie(nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			cookie := &http.Cookie{
-				Name:  privateCSRF.cookieName(),
+				Name:  privateCSRF.cookieName(nil),
 				Value: encoded,
 			}
 
@@ -155,7 +155,7 @@ var _ = Describe("CSRF Cookie with non-fixed name Tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				Expect(rw.Header().Get("Set-Cookie")).To(ContainSubstring(
-					fmt.Sprintf("%s=", privateCSRF.cookieName()),
+					fmt.Sprintf("%s=", privateCSRF.cookieName(nil)),
 				))
 				Expect(rw.Header().Get("Set-Cookie")).To(ContainSubstring(
 					fmt.Sprintf(
@@ -177,7 +177,7 @@ var _ = Describe("CSRF Cookie with non-fixed name Tests", func() {
 				Expect(rw.Header().Get("Set-Cookie")).To(Equal(
 					fmt.Sprintf(
 						"%s=; Path=%s; Domain=%s; Expires=%s; HttpOnly; Secure",
-						privateCSRF.cookieName(),
+						privateCSRF.cookieName(nil),
 						cookiePath,
 						cookieDomain,
 						testCookieExpires(testNow.Add(time.Hour*-1)),
@@ -188,7 +188,7 @@ var _ = Describe("CSRF Cookie with non-fixed name Tests", func() {
 
 		Context("cookieName", func() {
 			It("has the cookie options name as a base", func() {
-				Expect(privateCSRF.cookieName()).To(ContainSubstring(cookieName))
+				Expect(privateCSRF.cookieName(nil)).To(ContainSubstring(cookieName))
 			})
 		})
 	})

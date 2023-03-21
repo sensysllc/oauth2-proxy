@@ -16,6 +16,9 @@ const tenantIdKey contextKey = "tenantId"
 // extarcts tenantId stored in a context
 // returns empty string if tenantId not found
 func FromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
 	t, ok := ctx.Value(tenantIdKey).(string)
 	if !ok {
 		return ""
