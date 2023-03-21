@@ -116,7 +116,7 @@ type WriterFuncs struct {
 // WriteSignInPage implements the Writer interface.
 // If the SignInPageFunc is provided, this will be used, else a default
 // implementation will be used.
-func (w *WriterFuncs) WriteSignInPage(rw http.ResponseWriter, req *http.Request, redirectURL string, statusCode int) {
+func (w *WriterFuncs) WriteSignInPage(rw http.ResponseWriter, req *http.Request, _ providers.Provider, redirectURL string, statusCode int) {
 	if w.SignInPageFunc != nil {
 		w.SignInPageFunc(rw, req, redirectURL, statusCode)
 		return
@@ -130,7 +130,7 @@ func (w *WriterFuncs) WriteSignInPage(rw http.ResponseWriter, req *http.Request,
 // WriteErrorPage implements the Writer interface.
 // If the ErrorPageFunc is provided, this will be used, else a default
 // implementation will be used.
-func (w *WriterFuncs) WriteErrorPage(rw http.ResponseWriter, opts ErrorPageOpts) {
+func (w *WriterFuncs) WriteErrorPage(_ context.Context, rw http.ResponseWriter, opts ErrorPageOpts) {
 	if w.ErrorPageFunc != nil {
 		w.ErrorPageFunc(rw, opts)
 		return
@@ -152,7 +152,7 @@ func (w *WriterFuncs) ProxyErrorHandler(rw http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	w.WriteErrorPage(rw, ErrorPageOpts{
+	w.WriteErrorPage(nil, rw, ErrorPageOpts{
 		Status:   http.StatusBadGateway,
 		AppError: proxyErr.Error(),
 	})

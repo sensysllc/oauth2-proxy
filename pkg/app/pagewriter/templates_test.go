@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
+	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -38,6 +39,7 @@ var _ = Describe("Templates", func() {
 				// For default templates
 				ProxyPrefix string
 				Redirect    string
+				TenantId    string
 				Footer      string
 
 				// For default sign_in template
@@ -83,13 +85,13 @@ var _ = Describe("Templates", func() {
 			It("Use the default sign_in page", func() {
 				buf := bytes.NewBuffer([]byte{})
 				Expect(t.ExecuteTemplate(buf, signInTemplateName, data)).To(Succeed())
-				Expect(buf.String()).To(HavePrefix("\n<!DOCTYPE html>"))
+				Expect(strings.ReplaceAll(buf.String(), "\r\n", "\n")).To(HavePrefix("\n<!DOCTYPE html>"))
 			})
 
 			It("Use the default error page", func() {
 				buf := bytes.NewBuffer([]byte{})
 				Expect(t.ExecuteTemplate(buf, errorTemplateName, data)).To(Succeed())
-				Expect(buf.String()).To(HavePrefix("\n<!DOCTYPE html>"))
+				Expect(strings.ReplaceAll(buf.String(), "\r\n", "\n")).To(HavePrefix("\n<!DOCTYPE html>"))
 			})
 		})
 
@@ -132,7 +134,7 @@ var _ = Describe("Templates", func() {
 				It("Use the default error page", func() {
 					buf := bytes.NewBuffer([]byte{})
 					Expect(t.ExecuteTemplate(buf, errorTemplateName, data)).To(Succeed())
-					Expect(buf.String()).To(HavePrefix("\n<!DOCTYPE html>"))
+					Expect(strings.ReplaceAll(buf.String(), "\r\n", "\n")).To(HavePrefix("\n<!DOCTYPE html>"))
 				})
 			})
 
@@ -148,13 +150,13 @@ var _ = Describe("Templates", func() {
 				It("Use the default sign_in page", func() {
 					buf := bytes.NewBuffer([]byte{})
 					Expect(t.ExecuteTemplate(buf, signInTemplateName, data)).To(Succeed())
-					Expect(buf.String()).To(HavePrefix("\n<!DOCTYPE html>"))
+					Expect(strings.ReplaceAll(buf.String(), "\r\n", "\n")).To(HavePrefix("\n<!DOCTYPE html>"))
 				})
 
 				It("Use the custom error page", func() {
 					buf := bytes.NewBuffer([]byte{})
 					Expect(t.ExecuteTemplate(buf, errorTemplateName, data)).To(Succeed())
-					Expect(buf.String()).To(Equal("Testing testing TESTING"))
+					Expect(strings.ReplaceAll(buf.String(), "\r\n", "\n")).To(Equal("Testing testing TESTING"))
 				})
 			})
 

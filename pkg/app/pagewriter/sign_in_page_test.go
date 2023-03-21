@@ -3,6 +3,7 @@ package pagewriter
 import (
 	"errors"
 	"fmt"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/providers"
 	"html/template"
 	"io"
 	"net/http"
@@ -16,6 +17,23 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 )
+
+type TestProvider struct {
+	*providers.ProviderData
+}
+
+func (t TestProvider) Data() *providers.ProviderData {
+	return t.ProviderData
+}
+
+func NewTestProvider() TestProvider {
+	data := &providers.ProviderData{
+		ProviderName: "My Provider",
+	}
+	return TestProvider{
+		ProviderData: data,
+	}
+}
 
 var _ = Describe("SignIn Page", func() {
 
@@ -37,7 +55,6 @@ var _ = Describe("SignIn Page", func() {
 				template:         tmpl,
 				errorPageWriter:  errorPage,
 				proxyPrefix:      "/prefix/",
-				providerName:     "My Provider",
 				signInMessage:    "Sign In Here",
 				footer:           "Custom Footer Text",
 				version:          "v0.0.0-test",
@@ -54,11 +71,12 @@ var _ = Describe("SignIn Page", func() {
 		Context("WriteSignInPage", func() {
 			It("Writes the template to the response writer", func() {
 				recorder := httptest.NewRecorder()
-				signInPage.WriteSignInPage(recorder, request, "/redirect", http.StatusOK)
+
+				signInPage.WriteSignInPage(recorder, request, NewTestProvider(), "/redirect", http.StatusOK)
 
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(string(body)).To(Equal("/prefix/ My Provider Sign In Here Custom Footer Text v0.0.0-test /redirect true Logo Data"))
+				Expect(strings.ReplaceAll(string(body), "\r\n", "\n")).To(Equal("/prefix/ My Provider Sign In Here Custom Footer Text v0.0.0-test /redirect true Logo Data"))
 			})
 
 			It("Writes an error if the template can't be rendered", func() {
@@ -68,11 +86,11 @@ var _ = Describe("SignIn Page", func() {
 				signInPage.template = tmpl
 
 				recorder := httptest.NewRecorder()
-				signInPage.WriteSignInPage(recorder, request, "/redirect", http.StatusOK)
+				signInPage.WriteSignInPage(recorder, request, NewTestProvider(), "/redirect", http.StatusOK)
 
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(string(body)).To(Equal(fmt.Sprintf("Internal Server Error | %s", testRequestID)))
+				Expect(strings.ReplaceAll(string(body), "\r\n", "\n")).To(Equal(fmt.Sprintf("Internal Server Error | %s", testRequestID)))
 			})
 		})
 	})
@@ -157,6 +175,7 @@ var _ = Describe("SignIn Page", func() {
 				expectedErr:  errors.New("unknown extension: \".gif\", supported extensions are .svg, .jpg, .jpeg and .png"),
 				expectedData: "",
 			}),
+			// TODO: investigate on the difference between linux and windows.
 			Entry("when the logo does not exist", loadCustomLogoTableInput{
 				logoPath:     "unknown.svg",
 				expectedErr:  errors.New("could not read logo file: open unknown.svg: no such file or directory"),

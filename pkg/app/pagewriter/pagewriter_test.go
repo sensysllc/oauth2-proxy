@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -28,7 +29,6 @@ var _ = Describe("Writer", func() {
 				Version:          "<Version>",
 				Debug:            false,
 				DisplayLoginForm: false,
-				ProviderName:     "<ProviderName>",
 				SignInMessage:    "<SignInMessage>",
 			}
 
@@ -44,7 +44,7 @@ var _ = Describe("Writer", func() {
 
 			It("Writes the default error template", func() {
 				recorder := httptest.NewRecorder()
-				writer.WriteErrorPage(recorder, ErrorPageOpts{
+				writer.WriteErrorPage(nil, recorder, ErrorPageOpts{
 					Status:      500,
 					RedirectURL: "/redirect",
 					AppError:    "Some debug error",
@@ -52,16 +52,16 @@ var _ = Describe("Writer", func() {
 
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(string(body)).To(HavePrefix("\n<!DOCTYPE html>"))
+				Expect(strings.ReplaceAll(string(body), "\r\n", "\n")).To(HavePrefix("\n<!DOCTYPE html>"))
 			})
 
 			It("Writes the default sign in template", func() {
 				recorder := httptest.NewRecorder()
-				writer.WriteSignInPage(recorder, request, "/redirect", http.StatusOK)
+				writer.WriteSignInPage(recorder, request, NewTestProvider(), "/redirect", http.StatusOK)
 
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(string(body)).To(HavePrefix("\n<!DOCTYPE html>"))
+				Expect(strings.ReplaceAll(string(body), "\r\n", "\n")).To(HavePrefix("\n<!DOCTYPE html>"))
 			})
 		})
 
@@ -91,7 +91,7 @@ var _ = Describe("Writer", func() {
 
 			It("Writes the custom error template", func() {
 				recorder := httptest.NewRecorder()
-				writer.WriteErrorPage(recorder, ErrorPageOpts{
+				writer.WriteErrorPage(nil, recorder, ErrorPageOpts{
 					Status:      500,
 					RedirectURL: "/redirect",
 					AppError:    "Some debug error",
@@ -104,7 +104,7 @@ var _ = Describe("Writer", func() {
 
 			It("Writes the custom sign in template", func() {
 				recorder := httptest.NewRecorder()
-				writer.WriteSignInPage(recorder, request, "/redirect", http.StatusOK)
+				writer.WriteSignInPage(recorder, request, NewTestProvider(), "/redirect", http.StatusOK)
 
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
@@ -151,7 +151,7 @@ var _ = Describe("Writer", func() {
 				rw := httptest.NewRecorder()
 				req := httptest.NewRequest("", "/sign-in", nil)
 				redirectURL := "<redirectURL>"
-				in.writer.WriteSignInPage(rw, req, redirectURL, http.StatusOK)
+				in.writer.WriteSignInPage(rw, req, nil, redirectURL, http.StatusOK)
 
 				Expect(rw.Result().StatusCode).To(Equal(in.expectedStatus))
 
@@ -179,7 +179,7 @@ var _ = Describe("Writer", func() {
 		DescribeTable("WriteErrorPage",
 			func(in writerFuncsTableInput) {
 				rw := httptest.NewRecorder()
-				in.writer.WriteErrorPage(rw, ErrorPageOpts{
+				in.writer.WriteErrorPage(nil, rw, ErrorPageOpts{
 					Status:      http.StatusInternalServerError,
 					RedirectURL: "<redirectURL>",
 					RequestID:   "12345",
