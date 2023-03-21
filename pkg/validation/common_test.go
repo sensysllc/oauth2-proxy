@@ -122,7 +122,7 @@ var _ = Describe("Common", func() {
 					FromFile: "invalidFile",
 				}
 			},
-			expectedMsg: "error loadig secret from file: stat invalidFile: no such file or directory",
+			expectedMsg: "error loading secret from file: stat invalidFile: no such file or directory",
 		}),
 	)
 })

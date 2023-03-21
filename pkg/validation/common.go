@@ -31,7 +31,7 @@ func validateSecretSourceEnv(key string) string {
 
 func validateSecretSourceFile(path string) string {
 	if _, err := os.Stat(path); err != nil {
-		return fmt.Sprintf("error loadig secret from file: %v", err)
+		return fmt.Sprintf("error loading secret from file: %v", err)
 	}
 	return ""
 }
