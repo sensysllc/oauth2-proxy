@@ -24,7 +24,7 @@ var _ = Describe("CSRF Cookie Tests", func() {
 
 	BeforeEach(func() {
 		cookieOpts = &options.Cookie{
-			Name:           cookieName,
+			NamePrefix:     cookieName,
 			Secret:         cookieSecret,
 			Domains:        []string{cookieDomain},
 			Path:           cookiePath,
@@ -91,15 +91,15 @@ var _ = Describe("CSRF Cookie Tests", func() {
 	})
 
 	Context("encodeCookie and decodeCSRFCookie", func() {
-		It("encodes and decodes to the same nonces", func() {
+		It("encodes and decodes to the same nonces", func(ctx SpecContext) {
 			privateCSRF.OAuthState = []byte(csrfState)
 			privateCSRF.OIDCNonce = []byte(csrfNonce)
 
-			encoded, err := privateCSRF.encodeCookie()
+			encoded, err := privateCSRF.encodeCookie(ctx)
 			Expect(err).ToNot(HaveOccurred())
 
 			cookie := &http.Cookie{
-				Name:  privateCSRF.cookieName(),
+				Name:  privateCSRF.cookieName(ctx),
 				Value: encoded,
 			}
 			decoded, err := decodeCSRFCookie(cookie, cookieOpts)
@@ -110,12 +110,12 @@ var _ = Describe("CSRF Cookie Tests", func() {
 			Expect(decoded.OIDCNonce).To(Equal([]byte(csrfNonce)))
 		})
 
-		It("signs the encoded cookie value", func() {
-			encoded, err := privateCSRF.encodeCookie()
+		It("signs the encoded cookie value", func(ctx SpecContext) {
+			encoded, err := privateCSRF.encodeCookie(ctx)
 			Expect(err).ToNot(HaveOccurred())
 
 			cookie := &http.Cookie{
-				Name:  privateCSRF.cookieName(),
+				Name:  privateCSRF.cookieName(ctx),
 				Value: encoded,
 			}
 
@@ -150,14 +150,14 @@ var _ = Describe("CSRF Cookie Tests", func() {
 		})
 
 		Context("SetCookie", func() {
-			It("adds the encoded CSRF cookie to a ResponseWriter", func() {
+			It("adds the encoded CSRF cookie to a ResponseWriter", func(ctx SpecContext) {
 				rw := httptest.NewRecorder()
 
 				_, err := publicCSRF.SetCookie(rw, req)
 				Expect(err).ToNot(HaveOccurred())
 
 				Expect(rw.Header().Get("Set-Cookie")).To(ContainSubstring(
-					fmt.Sprintf("%s=", privateCSRF.cookieName()),
+					fmt.Sprintf("%s=", privateCSRF.cookieName(ctx)),
 				))
 				Expect(rw.Header().Get("Set-Cookie")).To(ContainSubstring(
 					fmt.Sprintf(
@@ -232,15 +232,14 @@ var _ = Describe("CSRF Cookie Tests", func() {
 		})
 
 		Context("ClearCookie", func() {
-			It("sets a cookie with an empty value in the past", func() {
+			It("sets a cookie with an empty value in the past", func(ctx SpecContext) {
 				rw := httptest.NewRecorder()
-
 				publicCSRF.ClearCookie(rw, req)
 
 				Expect(rw.Header().Get("Set-Cookie")).To(Equal(
 					fmt.Sprintf(
 						"%s=; Path=%s; Domain=%s; Expires=%s; HttpOnly; Secure",
-						privateCSRF.cookieName(),
+						privateCSRF.cookieName(ctx),
 						cookiePath,
 						cookieDomain,
 						testCookieExpires(testNow.Add(time.Hour*-1)),
@@ -250,8 +249,8 @@ var _ = Describe("CSRF Cookie Tests", func() {
 		})
 
 		Context("cookieName", func() {
-			It("has the cookie options name as a base", func() {
-				Expect(privateCSRF.cookieName()).To(ContainSubstring(cookieName))
+			It("has the cookie options name as a base", func(ctx SpecContext) {
+				Expect(privateCSRF.cookieName(ctx)).To(ContainSubstring(cookieName))
 			})
 		})
 	})

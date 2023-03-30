@@ -58,6 +58,10 @@ func main() {
 	if err != nil {
 		logger.Fatalf("ERROR: Failed to initialise OAuth2 Proxy: %v", err)
 	}
+	err = oauthproxy.Init(opts)
+	if err != nil {
+		logger.Fatalf("ERROR: Failed to initialise OAuth2 Proxy: %v", err)
+	}
 
 	if err := oauthproxy.Start(); err != nil {
 		logger.Fatalf("ERROR: Failed to start OAuth2 Proxy: %v", err)

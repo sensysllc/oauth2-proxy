@@ -1,6 +1,7 @@
 package pagewriter
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,11 +14,18 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const (
+	msIssuerURL = "https://login.microsoftonline.com/fabrikamb2c.onmicrosoft.com/v2.0/"
+	msKeysURL   = "https://login.microsoftonline.com/fabrikamb2c.onmicrosoft.com/discovery/v2.0/keys"
+)
+
 var _ = Describe("Writer", func() {
 	Context("NewWriter", func() {
 		var writer Writer
 		var opts Opts
 		var request *http.Request
+		var err error
+		var pd providers.Provider
 
 		BeforeEach(func() {
 			opts = Opts{
@@ -27,11 +35,25 @@ var _ = Describe("Writer", func() {
 				Version:          "<Version>",
 				Debug:            false,
 				DisplayLoginForm: false,
-				ProviderName:     "<ProviderName>",
 				SignInMessage:    "<SignInMessage>",
 			}
 
 			request = httptest.NewRequest("", "http://127.0.0.1/", nil)
+			providerConfig := options.Provider{
+				ID:               "id",
+				Type:             options.OIDCProvider,
+				ClientID:         "xyz",
+				ClientSecretFile: "abc",
+				Scope:            "openid email profile groups",
+				OIDCConfig: options.OIDCOptions{
+					IssuerURL:     msIssuerURL,
+					SkipDiscovery: true,
+					JwksURL:       msKeysURL,
+				},
+			}
+
+			pd, err = providers.NewProvider(providerConfig)
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		Context("With no custom templates", func() {
@@ -41,9 +63,9 @@ var _ = Describe("Writer", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("Writes the default error template", func() {
+			It("Writes the default error template", func(ctx SpecContext) {
 				recorder := httptest.NewRecorder()
-				writer.WriteErrorPage(recorder, ErrorPageOpts{
+				writer.WriteErrorPage(ctx, recorder, ErrorPageOpts{
 					Status:      500,
 					RedirectURL: "/redirect",
 					AppError:    "Some debug error",
@@ -56,7 +78,7 @@ var _ = Describe("Writer", func() {
 
 			It("Writes the default sign in template", func() {
 				recorder := httptest.NewRecorder()
-				writer.WriteSignInPage(recorder, request, "/redirect", http.StatusOK)
+				writer.WriteSignInPage(recorder, request, pd, "/redirect", http.StatusOK)
 
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
@@ -88,9 +110,9 @@ var _ = Describe("Writer", func() {
 				Expect(os.RemoveAll(customDir)).To(Succeed())
 			})
 
-			It("Writes the custom error template", func() {
+			It("Writes the custom error template", func(ctx SpecContext) {
 				recorder := httptest.NewRecorder()
-				writer.WriteErrorPage(recorder, ErrorPageOpts{
+				writer.WriteErrorPage(ctx, recorder, ErrorPageOpts{
 					Status:      500,
 					RedirectURL: "/redirect",
 					AppError:    "Some debug error",
@@ -103,8 +125,8 @@ var _ = Describe("Writer", func() {
 
 			It("Writes the custom sign in template", func() {
 				recorder := httptest.NewRecorder()
-				writer.WriteSignInPage(recorder, request, "/redirect", http.StatusOK)
 
+				writer.WriteSignInPage(recorder, request, pd, "/redirect", http.StatusOK)
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(body)).To(Equal("Custom Template"))
@@ -144,13 +166,36 @@ var _ = Describe("Writer", func() {
 			expectedStatus int
 			expectedBody   string
 		}
+		var err error
+		var pd providers.Provider
+
+		BeforeEach(func() {
+
+			providerConfig := options.Provider{
+				ID:               "id",
+				Type:             options.OIDCProvider,
+				ClientID:         "xyz",
+				ClientSecretFile: "abc",
+				Scope:            "openid email profile groups",
+				OIDCConfig: options.OIDCOptions{
+					IssuerURL:     msIssuerURL,
+					SkipDiscovery: true,
+					JwksURL:       msKeysURL,
+				},
+			}
+
+			pd, err = providers.NewProvider(providerConfig)
+			if err != nil {
+				Expect(err).ToNot(HaveOccurred())
+			}
+		})
 
 		DescribeTable("WriteSignInPage",
 			func(in writerFuncsTableInput) {
 				rw := httptest.NewRecorder()
 				req := httptest.NewRequest("", "/sign-in", nil)
 				redirectURL := "<redirectURL>"
-				in.writer.WriteSignInPage(rw, req, redirectURL, http.StatusOK)
+				in.writer.WriteSignInPage(rw, req, pd, redirectURL, http.StatusOK)
 
 				Expect(rw.Result().StatusCode).To(Equal(in.expectedStatus))
 
@@ -165,7 +210,7 @@ var _ = Describe("Writer", func() {
 			}),
 			Entry("With an override function", writerFuncsTableInput{
 				writer: &WriterFuncs{
-					SignInPageFunc: func(rw http.ResponseWriter, req *http.Request, redirectURL string, statusCode int) {
+					SignInPageFunc: func(rw http.ResponseWriter, req *http.Request, provider providers.Provider, redirectURL string, statusCode int) {
 						rw.WriteHeader(202)
 						rw.Write([]byte(fmt.Sprintf("%s %s", req.URL.Path, redirectURL)))
 					},
@@ -176,9 +221,9 @@ var _ = Describe("Writer", func() {
 		)
 
 		DescribeTable("WriteErrorPage",
-			func(in writerFuncsTableInput) {
+			func(in writerFuncsTableInput, ctx context.Context) {
 				rw := httptest.NewRecorder()
-				in.writer.WriteErrorPage(rw, ErrorPageOpts{
+				in.writer.WriteErrorPage(ctx, rw, ErrorPageOpts{
 					Status:      http.StatusInternalServerError,
 					RedirectURL: "<redirectURL>",
 					RequestID:   "12345",
@@ -195,17 +240,17 @@ var _ = Describe("Writer", func() {
 				writer:         &WriterFuncs{},
 				expectedStatus: 500,
 				expectedBody:   "500 - application error",
-			}),
+			}, context.Background()),
 			Entry("With an override function", writerFuncsTableInput{
 				writer: &WriterFuncs{
-					ErrorPageFunc: func(rw http.ResponseWriter, opts ErrorPageOpts) {
+					ErrorPageFunc: func(ctx context.Context, rw http.ResponseWriter, opts ErrorPageOpts) {
 						rw.WriteHeader(503)
 						rw.Write([]byte(fmt.Sprintf("%s %s", opts.RequestID, opts.RedirectURL)))
 					},
 				},
 				expectedStatus: 503,
 				expectedBody:   "12345 <redirectURL>",
-			}),
+			}, context.Background()),
 		)
 
 		DescribeTable("ProxyErrorHandler",
@@ -238,7 +283,7 @@ var _ = Describe("Writer", func() {
 			}),
 			Entry("With an override function for the error page", writerFuncsTableInput{
 				writer: &WriterFuncs{
-					ErrorPageFunc: func(rw http.ResponseWriter, opts ErrorPageOpts) {
+					ErrorPageFunc: func(ctx context.Context, rw http.ResponseWriter, opts ErrorPageOpts) {
 						rw.WriteHeader(500)
 						rw.Write([]byte("Internal Server Error"))
 					},
