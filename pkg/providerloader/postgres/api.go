@@ -137,25 +137,33 @@ func (api *API) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
 
 }
 
-func (api *API) validateProviderConfig(req *http.Request) (string, []byte, error) {
+func toProviderConfig(req *http.Request) (*options.Provider, error) {
 	var body []byte
 	var err error
 	body, err = io.ReadAll(req.Body)
 	defer req.Body.Close()
 
 	if err != nil {
-		return "", nil, fmt.Errorf("error while reading request body. %v", err)
+		return nil, fmt.Errorf("error while reading request body. %v", err)
 	}
 
 	var providerConf *options.Provider
 
 	err = json.Unmarshal(body, &providerConf)
 	if err != nil {
-		return "", nil, fmt.Errorf("error while decoding JSON. %v", err)
+		return nil, fmt.Errorf("error while decoding JSON. %v", err)
 	}
-
 	if providerConf.ID == "" {
-		return "", nil, fmt.Errorf("provider ID is not provided")
+		return nil, fmt.Errorf("provider ID is not provided")
+	}
+	return providerConf, nil
+}
+
+func (api *API) validateProviderConfig(req *http.Request) (string, []byte, error) {
+
+	providerConf, err := toProviderConfig(req)
+	if err != nil {
+		return "", nil, err
 	}
 
 	_, err = providers.NewProvider(*providerConf)

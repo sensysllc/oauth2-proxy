@@ -19,24 +19,32 @@ type provider struct {
 	ProviderConf datatypes.JSON
 }
 
+func verifyConn(db *gorm.DB, c options.Postgres) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	sqlDB.SetMaxOpenConns(c.MaxConnections)
+
+	res := db.Exec("create schema if not exists  " + c.Schema)
+	if res.Error != nil {
+		return res.Error
+	}
+
+	err = db.AutoMigrate(&provider{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func NewPostgresStore(c options.Postgres) (*PtgStore, error) {
 	db, err := gorm.Open(postgres.Open(c.ConnectionString()), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
 
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, err
-	}
-	sqlDB.SetMaxOpenConns(c.MaxConnections)
-
-	res := db.Exec("create schema if not exists  " + c.Schema)
-	if res.Error != nil {
-		return nil, res.Error
-	}
-
-	err = db.AutoMigrate(&provider{})
+	err = verifyConn(db, c)
 	if err != nil {
 		return nil, err
 	}
