@@ -2,6 +2,9 @@ package postgres
 
 import "context"
 
+// ConfigStore is an interface defined that allows any kind of database or store
+// for saving providers configuration.
+// Defining a generic interface allows for smooth testing as well.
 type ConfigStore interface {
 	Create(ctx context.Context, id string, providerConfig []byte) error
 	Update(ctx context.Context, id string, providerConfig []byte) error
@@ -9,6 +12,9 @@ type ConfigStore interface {
 	Delete(ctx context.Context, id string) error
 }
 
+// This is an implementation of ConfigStore interface which is used in testing scenarios.
+// As the name implies it is a fake store and looks for implementation of funcs defined in original
+// interface.
 type fakeConfigStore struct {
 	CreateFunc func(ctx context.Context, id string, providerConfig []byte) error
 	UpdateFunc func(ctx context.Context, id string, providerConfig []byte) error

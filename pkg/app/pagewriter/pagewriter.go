@@ -12,6 +12,7 @@ import (
 // error pages.
 // It can also be used to write errors for the http.ReverseProxy used in the
 // upstream package.
+// The function signatures can also be used to write dummy functions for tests.
 type Writer interface {
 	WriteSignInPage(rw http.ResponseWriter, req *http.Request, provider providers.Provider, t *SignInTemplate)
 	WriteErrorPage(ctx context.Context, rw http.ResponseWriter, opts ErrorPageOpts)
@@ -106,6 +107,7 @@ func NewWriter(opts Opts) (Writer, error) {
 // on override functions.
 // If any of the funcs are not provided, a default implementation will be used.
 // This is primarily for us in testing.
+// Thus enabling smooth testing.
 type WriterFuncs struct {
 	SignInPageFunc func(rw http.ResponseWriter, req *http.Request, provider providers.Provider, t *SignInTemplate)
 	ErrorPageFunc  func(ctx context.Context, rw http.ResponseWriter, opts ErrorPageOpts)
