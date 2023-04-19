@@ -60,16 +60,23 @@ func NewAPI(conf options.API, rs *RedisStore, proxyPrefix string) error {
 }
 
 // This function handles the api for creating a new config entry after validating
-// inputs
+// inputs in the configStore which is an interface defined for storing providers information
+// for adding multi-tenancy in oauth2-proxy
 func (api *API) CreateHandler(rw http.ResponseWriter, req *http.Request) {
+	// validate before creating new config entry and write error
+	// response in case of error
 	id, providerConf, err := api.validateProviderConfig(req)
 	if err != nil {
 		writeErrorResponse(rw, http.StatusBadRequest, err.Error())
 		return
 	}
 
+	// calling create of config storoptimizationse after validation, which will ensure that
+	// no invalid inputs are transferred to avoid errors and
+	// failures
 	err = api.configStore.Create(req.Context(), id, providerConf)
 	if err != nil {
+		// check if error type is already exists is returned
 		if errors.Is(err, ErrAlreadyExists) {
 			writeErrorResponse(rw, http.StatusConflict, err.Error())
 			return
@@ -78,9 +85,12 @@ func (api *API) CreateHandler(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// returning status created in case of successful execution
 	rw.WriteHeader(http.StatusCreated)
 }
 
+// This function handles the get api for getting the provider configuration
+// from store based on the ID present in the url
 func (api *API) GetHandler(rw http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	id := vars["id"]
@@ -100,6 +110,8 @@ func (api *API) GetHandler(rw http.ResponseWriter, req *http.Request) {
 	fmt.Fprint(rw, providerConf)
 }
 
+// This function handles the delete api to delete a provider config entry
+// from store using its ID given in the url
 func (api *API) DeleteHandler(rw http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	id := vars["id"]
@@ -119,7 +131,10 @@ func (api *API) DeleteHandler(rw http.ResponseWriter, req *http.Request) {
 
 // This function updates config in the primary config store which updates cache
 // as well, for update validation of inputs is also done to avoid failures
+// It is an http handler function defined for update api calls and it ensures
+// to return proper response in case of failure as well
 func (api *API) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
+	// inputs are validated
 	id, data, err := api.validateProviderConfig(req)
 	if err != nil {
 		writeErrorResponse(rw, http.StatusBadRequest, err.Error())
@@ -127,8 +142,11 @@ func (api *API) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
 
 	}
 
+	// update function of configStore interface is called to perform an update
+	// of the vaidated inputs passed in the request
 	err = api.configStore.Update(req.Context(), id, data)
 	if err != nil {
+		// check if error type is error not found
 		if errors.Is(err, ErrNotFound) {
 			writeErrorResponse(rw, http.StatusNotFound, err.Error())
 			return
@@ -137,6 +155,7 @@ func (api *API) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// return status accepted if no error is returned
 	rw.WriteHeader(http.StatusAccepted)
 
 }
