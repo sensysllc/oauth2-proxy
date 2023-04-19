@@ -80,7 +80,11 @@ var _ = Describe("Writer", func() {
 
 			It("Writes the default sign in template", func() {
 				recorder := httptest.NewRecorder()
-				writer.WriteSignInPage(recorder, request, pd, "/redirect", http.StatusOK)
+				t := SignInTemplate{
+					StatusCode: http.StatusOK,
+					Redirect:   "/redirect",
+				}
+				writer.WriteSignInPage(recorder, request, pd, &t)
 
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
@@ -128,7 +132,11 @@ var _ = Describe("Writer", func() {
 			It("Writes the custom sign in template", func() {
 				recorder := httptest.NewRecorder()
 
-				writer.WriteSignInPage(recorder, request, pd, "/redirect", http.StatusOK)
+				t := SignInTemplate{
+					StatusCode: http.StatusOK,
+					Redirect:   "/redirect",
+				}
+				writer.WriteSignInPage(recorder, request, pd, &t)
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(body)).To(Equal("Custom Template"))
@@ -197,7 +205,11 @@ var _ = Describe("Writer", func() {
 				rw := httptest.NewRecorder()
 				req := httptest.NewRequest("", "/sign-in", nil)
 				redirectURL := "<redirectURL>"
-				in.writer.WriteSignInPage(rw, req, pd, redirectURL, http.StatusOK)
+				t := SignInTemplate{
+					StatusCode: http.StatusOK,
+					Redirect:   redirectURL,
+				}
+				in.writer.WriteSignInPage(rw, req, pd, &t)
 
 				Expect(rw.Result().StatusCode).To(Equal(in.expectedStatus))
 
@@ -212,9 +224,9 @@ var _ = Describe("Writer", func() {
 			}),
 			Entry("With an override function", writerFuncsTableInput{
 				writer: &WriterFuncs{
-					SignInPageFunc: func(rw http.ResponseWriter, req *http.Request, provider providers.Provider, redirectURL string, statusCode int) {
+					SignInPageFunc: func(rw http.ResponseWriter, req *http.Request, provider providers.Provider, t *SignInTemplate) {
 						rw.WriteHeader(202)
-						rw.Write([]byte(fmt.Sprintf("%s %s", req.URL.Path, redirectURL)))
+						rw.Write([]byte(fmt.Sprintf("%s %s", req.URL.Path, t.Redirect)))
 					},
 				},
 				expectedStatus: 202,

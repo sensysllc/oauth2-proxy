@@ -75,7 +75,11 @@ var _ = Describe("SignIn Page", func() {
 		Context("WriteSignInPage", func() {
 			It("Writes the template to the response writer", func() {
 				recorder := httptest.NewRecorder()
-				signInPage.WriteSignInPage(recorder, request, pd, "/redirect", http.StatusOK)
+				t := SignInTemplate{
+					StatusCode: http.StatusOK,
+					Redirect:   "/redirect",
+				}
+				signInPage.WriteSignInPage(recorder, request, pd, &t)
 
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())
@@ -88,8 +92,12 @@ var _ = Describe("SignIn Page", func() {
 				Expect(err).ToNot(HaveOccurred())
 				signInPage.template = tmpl
 
+				t := SignInTemplate{
+					StatusCode: http.StatusOK,
+					Redirect:   "/redirect",
+				}
 				recorder := httptest.NewRecorder()
-				signInPage.WriteSignInPage(recorder, request, pd, "/redirect", http.StatusOK)
+				signInPage.WriteSignInPage(recorder, request, pd, &t)
 
 				body, err := io.ReadAll(recorder.Result().Body)
 				Expect(err).ToNot(HaveOccurred())

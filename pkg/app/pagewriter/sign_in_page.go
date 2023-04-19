@@ -51,36 +51,37 @@ type signInPageWriter struct {
 	logoData string
 }
 
+type SignInTemplate struct {
+	TenantIDInputName string
+	TenantID          string
+	ProviderName      string
+	SignInMessage     template.HTML
+	StatusCode        int
+	CustomLogin       bool
+	Redirect          string
+	Version           string
+	ProxyPrefix       string
+	Footer            template.HTML
+	LogoData          template.HTML
+}
+
 // WriteSignInPage writes the sign-in page to the given response writer.
 // It uses the redirectURL to be able to set the final destination for the user post login.
-func (s *signInPageWriter) WriteSignInPage(rw http.ResponseWriter, req *http.Request, provider providers.Provider, redirectURL string, statusCode int) {
+func (s *signInPageWriter) WriteSignInPage(rw http.ResponseWriter, req *http.Request, provider providers.Provider, t *SignInTemplate) {
 	// We allow unescaped template.HTML since it is user configured options
 	/* #nosec G203 */
-	t := struct {
-		TenantIDInputName string
-		TenantID          string
-		ProviderName      string
-		SignInMessage     template.HTML
-		StatusCode        int
-		CustomLogin       bool
-		Redirect          string
-		Version           string
-		ProxyPrefix       string
-		Footer            template.HTML
-		LogoData          template.HTML
-	}{
-		TenantIDInputName: tenantutils.DefaultTenantIDQueryParam,
-		TenantID:          tenantutils.FromContext(req.Context()),
-		ProviderName:      provider.Data().ProviderName,
-		SignInMessage:     template.HTML(s.signInMessage),
-		StatusCode:        statusCode,
-		CustomLogin:       s.displayLoginForm,
-		Redirect:          redirectURL,
-		Version:           s.version,
-		ProxyPrefix:       s.proxyPrefix,
-		Footer:            template.HTML(s.footer),
-		LogoData:          template.HTML(s.logoData),
-	}
+	t.TenantIDInputName = tenantutils.DefaultTenantIDQueryParam
+	t.TenantID = tenantutils.FromContext(req.Context())
+	t.ProviderName = provider.Data().ProviderName
+	/* #nosec G203 */
+	t.SignInMessage = template.HTML(s.signInMessage)
+	t.CustomLogin = s.displayLoginForm
+	t.Version = s.version
+	t.ProxyPrefix = s.proxyPrefix
+	/* #nosec G203 */
+	t.Footer = template.HTML(s.footer)
+	t.LogoData = template.HTML(s.logoData)
+	/* #nosec G203 */
 
 	err := s.template.Execute(rw, t)
 	if err != nil {
@@ -88,7 +89,7 @@ func (s *signInPageWriter) WriteSignInPage(rw http.ResponseWriter, req *http.Req
 		scope := middlewareapi.GetRequestScope(req)
 		s.errorPageWriter.WriteErrorPage(req.Context(), rw, ErrorPageOpts{
 			Status:      http.StatusInternalServerError,
-			RedirectURL: redirectURL,
+			RedirectURL: t.Redirect,
 			RequestID:   scope.RequestID,
 			AppError:    err.Error(),
 		})
