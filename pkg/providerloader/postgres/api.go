@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
@@ -36,16 +37,25 @@ func NewAPI(conf options.API, rs *RedisStore, proxyPrefix string) error {
 		pathPrefix = conf.PathPrefix
 	}
 
+	if conf.ReadHeaderTimeout == 0 {
+		conf.ReadHeaderTimeout = 10 * time.Second
+	}
+
 	r2 := r.PathPrefix(pathPrefix).Subrouter()
 	r2.HandleFunc("/provider", api.CreateHandler).Methods("POST")
 	r2.HandleFunc("/provider", api.UpdateHandler).Methods("PUT")
 	r2.HandleFunc("/provider/{id}", api.GetHandler).Methods("GET")
 	r2.HandleFunc("/provider/{id}", api.DeleteHandler).Methods("DELETE")
 
+	timeoutErr := ErrorResponse{
+		Code:    http.StatusRequestTimeout,
+		Message: "error due to request timeout",
+	}
+	errMsgJSON, _ := json.Marshal(timeoutErr)
 	server := &http.Server{
-		Handler:           r,
+		Handler:           http.TimeoutHandler(r, conf.HandlerTimeout, string(errMsgJSON)),
 		Addr:              conf.Host + ":" + strconv.Itoa(conf.Port),
-		ReadHeaderTimeout: conf.Timeout,
+		ReadHeaderTimeout: conf.ReadHeaderTimeout,
 	}
 
 	go func() {
@@ -60,7 +70,16 @@ func NewAPI(conf options.API, rs *RedisStore, proxyPrefix string) error {
 }
 
 func (api *API) CreateHandler(rw http.ResponseWriter, req *http.Request) {
-	id, providerConf, err := api.validateProviderConfig(req)
+	var providerConf []byte
+	var err error
+	providerConf, err = io.ReadAll(req.Body)
+	defer req.Body.Close()
+
+	if err != nil {
+		writeErrorResponse(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+	id, err := api.validateProviderConfig(providerConf)
 	if err != nil {
 		writeErrorResponse(rw, http.StatusBadRequest, err.Error())
 		return
@@ -116,14 +135,23 @@ func (api *API) DeleteHandler(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (api *API) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
-	id, data, err := api.validateProviderConfig(req)
+	var providerConf []byte
+	var err error
+	providerConf, err = io.ReadAll(req.Body)
+	defer req.Body.Close()
+
+	if err != nil {
+		writeErrorResponse(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+	id, err := api.validateProviderConfig(providerConf)
 	if err != nil {
 		writeErrorResponse(rw, http.StatusBadRequest, err.Error())
 		return
 
 	}
 
-	err = api.configStore.Update(req.Context(), id, data)
+	err = api.configStore.Update(req.Context(), id, providerConf)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeErrorResponse(rw, http.StatusNotFound, err.Error())
@@ -137,47 +165,25 @@ func (api *API) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
 
 }
 
-func (api *API) validateProviderConfig(req *http.Request) (string, []byte, error) {
-	providerConf, err := toProviderConfig(req)
-	if err != nil {
-		return "", nil, fmt.Errorf("error in request body to provider config conversion: %v", err)
-	}
-
-	_, err = providers.NewProvider(*providerConf)
-	if err != nil {
-		return "", nil, fmt.Errorf("invalid provider configuration: %v", err)
-	}
-
-	data, err := json.Marshal(providerConf)
-	if err != nil {
-		return "", nil, fmt.Errorf("error in marshalling")
-	}
-
-	return providerConf.ID, data, nil
-}
-
-func toProviderConfig(req *http.Request) (*options.Provider, error) {
-	var body []byte
-	var err error
-	body, err = io.ReadAll(req.Body)
-	defer req.Body.Close()
-
-	if err != nil {
-		return nil, fmt.Errorf("error while reading request body. %v", err)
-	}
+// ValidateProviderConfig validates the provider configuration and returns provider ID and error
+func (api *API) validateProviderConfig(providerconfigJSON []byte) (string, error) {
 
 	var providerConf *options.Provider
 
-	err = json.Unmarshal(body, &providerConf)
+	err := json.Unmarshal(providerconfigJSON, &providerConf)
 	if err != nil {
-		return nil, fmt.Errorf("error while decoding JSON. %v", err)
+		return "", fmt.Errorf("error while decoding JSON. %v", err)
 	}
 
 	if providerConf.ID == "" {
-		return nil, fmt.Errorf("provider ID is not provided")
+		return "", fmt.Errorf("provider ID is not provided")
+	}
+	_, err = providers.NewProvider(*providerConf)
+	if err != nil {
+		return "", fmt.Errorf("invalid provider configuration: %v", err)
 	}
 
-	return providerConf, nil
+	return providerConf.ID, nil
 }
 
 func writeErrorResponse(rw http.ResponseWriter, code int, message string) {

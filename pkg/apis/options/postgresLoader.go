@@ -10,7 +10,7 @@ type PostgresLoader struct {
 	// Postgres defines the configuration of Postgres DB store.
 	Postgres Postgres
 
-	// Redis defines the configuration of Redis cache DB.
+	// Redis defines the configuration of Redis DB which is used as a cache.
 	Redis Redis
 
 	// API defines configuration of API exposed for CURD operations
@@ -28,11 +28,17 @@ type API struct {
 
 	// PathPrefix is an optional prefix that will be
 	// prepended to the API path if it is non-empty.
+	// Default is set to options.ProxyPrefix which is set to "/oauth2" by default.
 	PathPrefix string
 
-	// Timeout is the time duration value
+	// HandlerTimeout is the time duration value
 	// after which the API will timeout.
-	Timeout time.Duration
+	HandlerTimeout time.Duration
+
+	// ReadHeaderTimeout is the time.duration allowed
+	// to read request header. If not set a default value of
+	// 10 seconds is used.
+	ReadHeaderTimeout time.Duration
 }
 
 type Redis struct {
@@ -86,19 +92,17 @@ type Postgres struct {
 
 	// This parameter specifies the name of a file containing SSL certificate authority (CA) certificate(s).
 	// If the file exists, the server's certificate will be verified to be signed by one of these authorities.
-	// The default is ~/.postgresql/root.crt.
 	SslRootCert string
 
 	// This parameter specifies the file name of the SSL server certificate revocation list (CRL). Certificates listed in this file, if it exists,
-	// will be rejected while attempting to authenticate the server's certificate. If neither sslcrl nor sslcrldir is set, this
-	// setting is taken as ~/.postgresql/root.crl.
+	// will be rejected while attempting to authenticate the server's certificate.
 	SslCrl string
 
-	// This parameter specifies the file name of the client SSL certificate, replacing the default ~/.postgresql/postgresql.crt. This parameter is ignored if an SSL connection is not made.
+	// This parameter specifies the file name of the client SSL certificate. This parameter is ignored if an SSL connection is not made.
 	SslCert string
 
 	// This parameter specifies the location for the secret key used for the client certificate.
-	// It can either specify a file name that will be used instead of the default ~/.postgresql/postgresql.key, or it can specify a key obtained from an external “engine” (engines are OpenSSL loadable modules). An external engine specification should consist of a colon-separated engine name and an engine-specific key identifier.
+	// It can either specify a file name, or it can specify a key obtained from an external “engine” (engines are OpenSSL loadable modules). An external engine specification should consist of a colon-separated engine name and an engine-specific key identifier.
 	// This parameter is ignored if an SSL connection is not made.
 	SslKey string
 }

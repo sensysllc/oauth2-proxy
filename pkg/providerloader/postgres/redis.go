@@ -31,6 +31,9 @@ func NewRedisStore(opts options.Redis, configStore ConfigStore) (*RedisStore, er
 }
 
 func (rs *RedisStore) key(id string) string {
+	if rs.redisOptions.Prefix == "" {
+		return id
+	}
 	return rs.redisOptions.Prefix + "-" + id
 }
 
@@ -50,10 +53,8 @@ func (rs *RedisStore) Create(ctx context.Context, id string, providerConfig []by
 	return nil
 }
 
-// This function updates an exisiting entry in redis
-// it first calls update of config store
-// then update in redis store is performed using set func as no specific update func is present in redis
-// however if an entry is non existent update from config store will result in error and function aborts
+// This function updates an exisiting entry in redis along with update in
+// config store and return error upon failure
 func (rs *RedisStore) Update(ctx context.Context, id string, providerconf []byte) error {
 	// update in postgres
 	err := rs.configStore.Update(ctx, id, providerconf)

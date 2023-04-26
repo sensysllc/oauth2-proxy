@@ -669,12 +669,7 @@ func (p *OAuthProxy) SignInPage(rw http.ResponseWriter, req *http.Request, code 
 		redirectURL = "/"
 	}
 
-	t := pagewriter.SignInTemplate{
-		StatusCode: code,
-		Redirect:   redirectURL,
-	}
-
-	p.pageWriter.WriteSignInPage(rw, req, provider, &t)
+	p.pageWriter.WriteSignInPage(rw, req, redirectURL, code)
 }
 
 // ManualSignIn handles basic auth logins to the proxy

@@ -19,7 +19,7 @@ type provider struct {
 	ProviderConf datatypes.JSON
 }
 
-func verifySchema(db *gorm.DB, schema string) error {
+func runMigrations(db *gorm.DB, schema string) error {
 	res := db.Exec("create schema if not exists  " + schema)
 	if res.Error != nil {
 		return res.Error
@@ -44,7 +44,7 @@ func NewPostgresStore(c options.Postgres) (*PtgStore, error) {
 	}
 	sqlDB.SetMaxOpenConns(c.MaxConnections)
 
-	err = verifySchema(db, c.Schema)
+	err = runMigrations(db, c.Schema)
 	if err != nil {
 		return nil, err
 	}
