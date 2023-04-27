@@ -83,7 +83,7 @@ func (rs *RedisStore) Get(ctx context.Context, id string) (string, error) {
 		// set or create entry in redis store
 		err = rs.rdb.Set(ctx, rs.key(id), []byte(val), rs.redisOptions.Expiry)
 		if err != nil {
-			logger.Errorf("could not create entry in redis store: %w", err)
+			logger.Errorf("could not create entry in redis store: %v", err)
 		}
 		return val, nil
 	}
