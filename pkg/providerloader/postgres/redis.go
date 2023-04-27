@@ -48,7 +48,7 @@ func (rs *RedisStore) Create(ctx context.Context, id string, providerConfig []by
 	// then set(create) in redis store
 	err = rs.rdb.Set(ctx, rs.key(id), providerConfig, rs.redisOptions.Expiry)
 	if err != nil {
-		return fmt.Errorf("failed to create in redis store: %v", err)
+		return fmt.Errorf("failed to create in redis store: %w", err)
 	}
 	return nil
 }
@@ -65,7 +65,7 @@ func (rs *RedisStore) Update(ctx context.Context, id string, providerconf []byte
 	// update in redis store
 	err = rs.rdb.Set(ctx, rs.key(id), providerconf, rs.redisOptions.Expiry)
 	if err != nil {
-		return fmt.Errorf("failed to update in redis store: %v", err)
+		return fmt.Errorf("failed to update in redis store: %w", err)
 	}
 	return nil
 }
@@ -83,7 +83,7 @@ func (rs *RedisStore) Get(ctx context.Context, id string) (string, error) {
 		// set or create entry in redis store
 		err = rs.rdb.Set(ctx, rs.key(id), []byte(val), rs.redisOptions.Expiry)
 		if err != nil {
-			logger.Errorf("could not create entry in redis store: %v", err)
+			logger.Errorf("could not create entry in redis store: %w", err)
 		}
 		return val, nil
 	}
@@ -101,7 +101,7 @@ func (rs *RedisStore) Delete(ctx context.Context, id string) error {
 	// delete in redis store
 	err = rs.rdb.Del(ctx, rs.key(id))
 	if err != nil {
-		return fmt.Errorf("failed to create in redis store: %v", err)
+		return fmt.Errorf("failed to create in redis store: %w", err)
 	}
 	return nil
 }

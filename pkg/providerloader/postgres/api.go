@@ -25,6 +25,10 @@ type ErrorResponse struct {
 	Message string `json:"message"`
 }
 
+func (errRes ErrorResponse) Error() string {
+	return fmt.Sprintf("code=%d: %s", errRes.Code, errRes.Message)
+}
+
 func NewAPI(conf options.API, rs *RedisStore, proxyPrefix string) error {
 	r := mux.NewRouter()
 	api := API{
@@ -48,8 +52,8 @@ func NewAPI(conf options.API, rs *RedisStore, proxyPrefix string) error {
 	r2.HandleFunc("/provider/{id}", api.DeleteHandler).Methods("DELETE")
 
 	timeoutErr := ErrorResponse{
-		Code:    http.StatusRequestTimeout,
-		Message: "error due to request timeout",
+		Code:    http.StatusServiceUnavailable,
+		Message: "request timed out",
 	}
 	errMsgJSON, _ := json.Marshal(timeoutErr)
 	server := &http.Server{
@@ -172,7 +176,7 @@ func (api *API) validateProviderConfig(providerconfigJSON []byte) (string, error
 
 	err := json.Unmarshal(providerconfigJSON, &providerConf)
 	if err != nil {
-		return "", fmt.Errorf("error while decoding JSON. %v", err)
+		return "", fmt.Errorf("error while decoding JSON. %w", err)
 	}
 
 	if providerConf.ID == "" {
@@ -180,7 +184,7 @@ func (api *API) validateProviderConfig(providerconfigJSON []byte) (string, error
 	}
 	_, err = providers.NewProvider(*providerConf)
 	if err != nil {
-		return "", fmt.Errorf("invalid provider configuration: %v", err)
+		return "", fmt.Errorf("invalid provider configuration: %w", err)
 	}
 
 	return providerConf.ID, nil
