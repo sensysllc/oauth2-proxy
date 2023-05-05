@@ -10,7 +10,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
-	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/encryption"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -47,15 +46,9 @@ func NewMock() (sqlmock.Sqlmock, *PtgStore) {
 		log.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
 	}
 
-	secret := make([]byte, 32)
-
-	cstd, _ := encryption.NewCFBCipher(secret)
-	cb64 := encryption.NewBase64Cipher(cstd)
-
 	pts := PtgStore{
 		configuration: &conf,
 		db:            gdb,
-		cipher:        cb64,
 	}
 
 	return mock, &pts
@@ -100,7 +93,7 @@ func TestPostgresStore_Create(t *testing.T) {
 		mock, postgresStore := NewMock()
 
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO \"providers\" (\"id\",\"provider_conf\") VALUES ($1,$2)").WithArgs(test.id, sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, test.RowsAffected)).WillReturnError(test.sqlError)
+		mock.ExpectExec("INSERT INTO \"providers\" (\"id\",\"provider_conf\") VALUES ($1,$2)").WithArgs(test.id, test.providerConf).WillReturnResult(sqlmock.NewResult(0, test.RowsAffected)).WillReturnError(test.sqlError)
 		if test.sqlError != nil {
 			mock.ExpectRollback()
 		} else {
@@ -159,7 +152,7 @@ func TestPostgresStore_Update(t *testing.T) {
 		mock, postgresStore := NewMock()
 
 		mock.ExpectBegin()
-		mock.ExpectExec("UPDATE \"providers\" SET \"provider_conf\"=$1 WHERE id = $2").WithArgs(sqlmock.AnyArg(), test.id).WillReturnResult(sqlmock.NewResult(0, test.RowsAffected)).WillReturnError(test.sqlError)
+		mock.ExpectExec("UPDATE \"providers\" SET \"provider_conf\"=$1 WHERE id = $2").WithArgs(test.providerConf, test.id).WillReturnResult(sqlmock.NewResult(0, test.RowsAffected)).WillReturnError(test.sqlError)
 
 		if test.sqlError != nil {
 			mock.ExpectRollback()
@@ -207,9 +200,8 @@ func TestPostgresStore_Get(t *testing.T) {
 	}
 	for i, test := range tests {
 		mock, postgresStore := NewMock()
-		conf, _ := postgresStore.encryptProviderConfig([]byte(test.providerConf))
 
-		rows := sqlmock.NewRows([]string{"id", "provider_conf"}).AddRow(test.id, string(conf))
+		rows := sqlmock.NewRows([]string{"id", "provider_conf"}).AddRow(test.id, test.providerConf)
 
 		mock.ExpectQuery("SELECT * FROM \"providers\" WHERE \"providers\".\"id\" = $1 ORDER BY \"providers\".\"id\" LIMIT 1").WithArgs(test.id).WillReturnRows(rows).WillReturnError(test.sqlError)
 		providerConf, err := postgresStore.Get(context.Background(), test.id)

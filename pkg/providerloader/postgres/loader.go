@@ -25,6 +25,11 @@ func New(opts options.PostgresLoader, proxyPrefix string) (*ProviderStore, error
 		return nil, err
 	}
 
+	enDecorator, err := EncryptionDecorator(rs, opts.Secret)
+	if err != nil {
+		return nil, err
+	}
+
 	err = NewAPI(opts.API, rs, proxyPrefix)
 	if err != nil {
 		return nil, err
@@ -32,7 +37,7 @@ func New(opts options.PostgresLoader, proxyPrefix string) (*ProviderStore, error
 
 	l := ProviderStore{
 		opts: opts,
-		rs:   rs,
+		rs:   enDecorator,
 	}
 	return &l, nil
 }
