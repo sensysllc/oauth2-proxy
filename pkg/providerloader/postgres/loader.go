@@ -30,7 +30,7 @@ func New(opts options.PostgresLoader, proxyPrefix string) (*ProviderStore, error
 		return nil, err
 	}
 
-	err = NewAPI(opts.API, rs, proxyPrefix)
+	err = NewAPI(opts.API, enDecorator, proxyPrefix)
 	if err != nil {
 		return nil, err
 	}

@@ -53,19 +53,19 @@ func (en *encryptionDecorator) encryptOrDecryptClientSecret(providerconf []byte,
 }
 
 func (en *encryptionDecorator) Create(ctx context.Context, id string, providerconf []byte) error {
-	encryptedSecret, err := en.encryptOrDecryptClientSecret(providerconf, en.cipher.Encrypt)
+	updatedProviderconf, err := en.encryptOrDecryptClientSecret(providerconf, en.cipher.Encrypt)
 	if err != nil {
 		return fmt.Errorf("encryption error: %w", err)
 	}
-	return en.ConfigStore.Create(ctx, id, encryptedSecret)
+	return en.ConfigStore.Create(ctx, id, updatedProviderconf)
 }
 
 func (en *encryptionDecorator) Update(ctx context.Context, id string, providerconf []byte) error {
-	encryptedSecret, err := en.encryptOrDecryptClientSecret(providerconf, en.cipher.Encrypt) // secret in updates is encrypted
+	updatedProviderconf, err := en.encryptOrDecryptClientSecret(providerconf, en.cipher.Encrypt) // secret in updates is encrypted
 	if err != nil {
 		return fmt.Errorf("encryption error: %w", err) // return error in case of unsuccessful
 	}
-	return en.ConfigStore.Update(ctx, id, encryptedSecret)
+	return en.ConfigStore.Update(ctx, id, updatedProviderconf)
 }
 
 func (en *encryptionDecorator) Get(ctx context.Context, id string) (string, error) {
