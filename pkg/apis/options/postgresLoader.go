@@ -17,7 +17,7 @@ type PostgresLoader struct {
 	// on the configuration store.
 	API API
 
-	// Secret is the secret string used for encryption of keycloak secret before
+	// Secret is the secret string used for encryption of client secret before
 	// storing it in db and cache.
 	Secret string
 }

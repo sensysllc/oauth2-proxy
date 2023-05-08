@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/encryption"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/providers"
 )
 
@@ -15,21 +16,11 @@ type ProviderStore struct {
 }
 
 func New(opts options.PostgresLoader, proxyPrefix string) (*ProviderStore, error) {
-	ps, err := NewPostgresStore(opts.Postgres)
+
+	enDecorator, err := initializeConfigStore(opts)
 	if err != nil {
 		return nil, err
 	}
-
-	rs, err := NewRedisStore(opts.Redis, ps)
-	if err != nil {
-		return nil, err
-	}
-
-	enDecorator, err := EncryptionDecorator(rs, opts.Secret)
-	if err != nil {
-		return nil, err
-	}
-
 	err = NewAPI(opts.API, enDecorator, proxyPrefix)
 	if err != nil {
 		return nil, err
@@ -71,4 +62,36 @@ func providerFromConfig(providerJSON string) (providers.Provider, error) {
 		return nil, fmt.Errorf("invalid provider config(id=%s): %s", providerConf.ID, err.Error())
 	}
 	return provider, nil
+}
+
+func initializeEncryptionDecorator(secret string, cs ConfigStore) (ConfigStore, error) {
+	cstd, err := encryption.NewCFBCipher([]byte(secret))
+	if err != nil {
+		return nil, fmt.Errorf("unable to create cipher from secret: %w", err)
+	}
+	cb64 := encryption.NewBase64Cipher(cstd)
+
+	enDecorator, err := EncryptionDecorator(cs, cb64)
+	if err != nil {
+		return nil, err
+	}
+	return enDecorator, nil
+}
+
+func initializeConfigStore(opts options.PostgresLoader) (ConfigStore, error) {
+	ps, err := NewPostgresStore(opts.Postgres)
+	if err != nil {
+		return nil, err
+	}
+
+	rs, err := NewRedisStore(opts.Redis, ps)
+	if err != nil {
+		return nil, err
+	}
+
+	enDecorator, err := initializeEncryptionDecorator(opts.Secret, rs)
+	if err != nil {
+		return nil, err
+	}
+	return enDecorator, nil
 }

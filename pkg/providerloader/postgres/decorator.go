@@ -16,16 +16,10 @@ type encryptionDecorator struct {
 	cipher encryption.Cipher
 }
 
-func EncryptionDecorator(c ConfigStore, secret string) (ConfigStore, error) {
-
-	cstd, err := encryption.NewCFBCipher([]byte(secret))
-	if err != nil {
-		return nil, fmt.Errorf("unable to create cipher from secret: %w", err)
-	}
-	cb64 := encryption.NewBase64Cipher(cstd)
+func EncryptionDecorator(c ConfigStore, cipher encryption.Cipher) (ConfigStore, error) {
 	return &encryptionDecorator{
 		ConfigStore: c,
-		cipher:      cb64,
+		cipher:      cipher,
 	}, nil
 }
 

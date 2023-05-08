@@ -31,7 +31,7 @@ func Test_EncryptionDecorator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := EncryptionDecorator(tt.c, tt.secret)
+			_, err := EncryptionDecorator(tt.c, FakeCipher{})
 			if err != nil && !tt.wantErr {
 				t.Errorf("EncryptionDecorator, got error: '%v'", err)
 			}
@@ -41,6 +41,7 @@ func Test_EncryptionDecorator(t *testing.T) {
 }
 
 func Test_encryptOrDecryptClientSecret(t *testing.T) {
+	f := FakeCipher{}
 	tests := []struct {
 		name         string
 		providerconf []byte
@@ -58,14 +59,14 @@ func Test_encryptOrDecryptClientSecret(t *testing.T) {
 		{
 			"with error from action func",
 			[]byte("{\"id\":\"xxx'\", \"provider\":\"keycloak\", \"clientSecret\": \"ufhwuif\"}"),
-			fakeEntrypt,
+			f.Encrypt,
 			nil,
 			true,
 		},
 		{
 			"with no error ",
 			[]byte("{\"id\":\"xxx'\", \"provider\":\"keycloak\", \"clientSecret\": \"secret\"}"),
-			fakeEntrypt,
+			f.Encrypt,
 			[]byte("{\"clientSecret\":\"secret\",\"keycloakConfig\":{},\"azureConfig\":{},\"ADFSConfig\":{},\"bitbucketConfig\":{},\"githubConfig\":{},\"gitlabConfig\":{},\"googleConfig\":{},\"oidcConfig\":{},\"loginGovConfig\":{},\"id\":\"xxx'\",\"provider\":\"keycloak\"}"),
 			false,
 		},
@@ -104,7 +105,7 @@ func Test_Create(t *testing.T) {
 		},
 		{
 			"with no error ",
-			[]byte("{\"id\":\"xxx'\", \"provider\":\"keycloak\"}"),
+			[]byte("{\"id\":\"xxx'\", \"provider\":\"keycloak\",\"clientSecret\": \"secret\"}"),
 			nil,
 			false,
 		},
@@ -112,7 +113,7 @@ func Test_Create(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			en, _ := EncryptionDecorator(fakeConfigStore{CreateFunc: tt.createFunc}, "iuyiuyer8507uy76")
+			en, _ := EncryptionDecorator(fakeConfigStore{CreateFunc: tt.createFunc}, FakeCipher{})
 			err := en.Create(context.Background(), "id", tt.providerconf)
 			if err != nil && !tt.wantErr {
 				t.Errorf("Create returned error: '%v'", err)
@@ -142,7 +143,7 @@ func Test_Update(t *testing.T) {
 		},
 		{
 			"with no error ",
-			[]byte("{\"id\":\"xxx'\", \"provider\":\"keycloak\"}"),
+			[]byte("{\"id\":\"xxx'\", \"provider\":\"keycloak\", \"clientSecret\": \"secret\"}"),
 			nil,
 			false,
 		},
@@ -150,7 +151,7 @@ func Test_Update(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			en, _ := EncryptionDecorator(fakeConfigStore{UpdateFunc: tt.updateFunc}, "iuyiuyer8507uy76")
+			en, _ := EncryptionDecorator(fakeConfigStore{UpdateFunc: tt.updateFunc}, FakeCipher{})
 			err := en.Update(context.Background(), "id", tt.providerconf)
 			if err != nil && !tt.wantErr {
 				t.Errorf("Update returned error: '%v'", err)
@@ -190,7 +191,7 @@ func Test_Get(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			en, _ := EncryptionDecorator(fakeConfigStore{GetFunc: tt.getFunc}, "afghjuiektlm87jq")
+			en, _ := EncryptionDecorator(fakeConfigStore{GetFunc: tt.getFunc}, FakeCipher{}) //"afghjuiektlm87jq")
 			got, err := en.Get(context.Background(), "id")
 			if err == nil && !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("GET got  = %v, want %v", string(got), string(tt.want))
@@ -201,10 +202,18 @@ func Test_Get(t *testing.T) {
 	}
 }
 
-func fakeEntrypt(b []byte) ([]byte, error) {
-	fmt.Println(string(b))
-	if string(b) == "secret" {
-		return b, nil
+type FakeCipher struct {
+}
+
+func (f FakeCipher) Encrypt(value []byte) ([]byte, error) {
+	fmt.Println(string(value))
+	if string(value) == "secret" {
+		return value, nil
 	}
 	return nil, errors.New("error from encrypt")
+}
+
+func (f FakeCipher) Decrypt(ciphertext []byte) ([]byte, error) {
+
+	return []byte("hf39jrh93uhd93wjd4iwj"), nil
 }
