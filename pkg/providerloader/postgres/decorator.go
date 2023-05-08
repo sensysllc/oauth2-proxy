@@ -31,7 +31,7 @@ func EncryptionDecorator(c ConfigStore, secret string) (ConfigStore, error) {
 
 type encryptOrDecryptFunc func([]byte) ([]byte, error)
 
-func (en *encryptionDecorator) encryptOrDecryptClientSecret(providerconf []byte, action encryptOrDecryptFunc) ([]byte, error) {
+func encryptOrDecryptClientSecret(providerconf []byte, action encryptOrDecryptFunc) ([]byte, error) {
 	var providerConf *options.Provider
 
 	err := json.Unmarshal(providerconf, &providerConf)
@@ -53,7 +53,7 @@ func (en *encryptionDecorator) encryptOrDecryptClientSecret(providerconf []byte,
 }
 
 func (en *encryptionDecorator) Create(ctx context.Context, id string, providerconf []byte) error {
-	updatedProviderconf, err := en.encryptOrDecryptClientSecret(providerconf, en.cipher.Encrypt)
+	updatedProviderconf, err := encryptOrDecryptClientSecret(providerconf, en.cipher.Encrypt)
 	if err != nil {
 		return fmt.Errorf("encryption error: %w", err)
 	}
@@ -61,7 +61,7 @@ func (en *encryptionDecorator) Create(ctx context.Context, id string, providerco
 }
 
 func (en *encryptionDecorator) Update(ctx context.Context, id string, providerconf []byte) error {
-	updatedProviderconf, err := en.encryptOrDecryptClientSecret(providerconf, en.cipher.Encrypt) // secret in updates is encrypted
+	updatedProviderconf, err := encryptOrDecryptClientSecret(providerconf, en.cipher.Encrypt) // secret in updates is encrypted
 	if err != nil {
 		return fmt.Errorf("encryption error: %w", err) // return error in case of unsuccessful
 	}
@@ -74,10 +74,10 @@ func (en *encryptionDecorator) Get(ctx context.Context, id string) (string, erro
 		return "", err
 	}
 
-	UpdatedProviderconf, err := en.encryptOrDecryptClientSecret([]byte(providerconf), en.cipher.Decrypt)
+	updatedProviderconf, err := encryptOrDecryptClientSecret([]byte(providerconf), en.cipher.Decrypt)
 	if err != nil {
 		return "", err
 	}
 
-	return string(UpdatedProviderconf), nil
+	return string(updatedProviderconf), nil
 }
