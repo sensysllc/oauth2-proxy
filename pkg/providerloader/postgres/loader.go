@@ -11,24 +11,24 @@ import (
 )
 
 type ProviderStore struct {
-	opts options.PostgresLoader
-	rs   ConfigStore
+	opts        options.PostgresLoader
+	configStore ConfigStore
 }
 
 func New(opts options.PostgresLoader, proxyPrefix string) (*ProviderStore, error) {
 
-	enDecorator, err := initializeConfigStore(opts)
+	configStore, err := initializeConfigStore(opts)
 	if err != nil {
 		return nil, err
 	}
-	err = NewAPI(opts.API, enDecorator, proxyPrefix)
+	err = NewAPI(opts.API, configStore, proxyPrefix)
 	if err != nil {
 		return nil, err
 	}
 
 	l := ProviderStore{
-		opts: opts,
-		rs:   enDecorator,
+		opts:        opts,
+		configStore: configStore,
 	}
 	return &l, nil
 }
@@ -38,7 +38,7 @@ func (ps *ProviderStore) Load(ctx context.Context, id string) (providers.Provide
 		return nil, fmt.Errorf("provider id is empty")
 	}
 
-	data, err := ps.rs.Get(ctx, id)
+	data, err := ps.configStore.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func providerFromConfig(providerJSON string) (providers.Provider, error) {
 	return provider, nil
 }
 
-func initializeEncryptionDecorator(secret string, cs ConfigStore) (ConfigStore, error) {
+func applyEncryptionDecorator(secret string, cs ConfigStore) (ConfigStore, error) {
 	cstd, err := encryption.NewCFBCipher([]byte(secret))
 	if err != nil {
 		return nil, fmt.Errorf("unable to create cipher from secret: %w", err)
@@ -89,7 +89,7 @@ func initializeConfigStore(opts options.PostgresLoader) (ConfigStore, error) {
 		return nil, err
 	}
 
-	enDecorator, err := initializeEncryptionDecorator(opts.Secret, rs)
+	enDecorator, err := applyEncryptionDecorator(opts.Secret, rs)
 	if err != nil {
 		return nil, err
 	}
