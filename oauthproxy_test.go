@@ -2156,6 +2156,8 @@ func baseTestOptions() *options.Options {
 	opts.Providers[0].ClientID = clientID
 	opts.Providers[0].ClientSecret = clientSecret
 	opts.EmailDomains = []string{"*"}
+	opts.ProviderCache.CacheDuration = 30
+	opts.ProviderCache.CacheLimit = 10
 
 	// Default injected headers for legacy configuration
 	opts.InjectRequestHeaders = []options.Header{

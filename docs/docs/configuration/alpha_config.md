@@ -169,6 +169,7 @@ They may change between releases without notice.
 | `metricsServer` | _[Server](#server)_ | MetricsServer is used to configure the HTTP(S) server for metrics.<br/>You may choose to run both HTTP and HTTPS servers simultaneously.<br/>This can be done by setting the BindAddress and the SecureBindAddress simultaneously.<br/>To use the secure server you must configure a TLS certificate and key. |
 | `providers` | _[Providers](#providers)_ | Providers is used to configure multiple providers. |
 | `providerLoader` | _[ProviderLoader](#providerloader)_ | ProviderLoader is used to allow multi-tenancy in oauth2-proxy.<br/>You can choose between single, config and postgres types. |
+| `providersCache` | _[ProviderCache](#providercache)_ |  |
 | `tenantMatcher` | _[TenantMatcher](#tenantmatcher)_ | TenantMatcher is used to configure the tenant-id matching rules for extracting tenant-id from request<br/>which will then in turn cause providerLoader to load provider/tenant identifying from its ID.<br/>The rules define where to look for tenant-id in request header, host, query or path or their precedence. |
 
 ### AzureOptions
@@ -471,6 +472,17 @@ Provider holds all configuration for a single provider
 | `scope` | _string_ | Scope is the OAuth scope specification |
 | `allowedGroups` | _[]string_ | AllowedGroups is a list of restrict logins to members of this group |
 | `code_challenge_method` | _string_ | The code challenge method |
+
+### ProviderCache
+
+(**Appears on:** [AlphaOptions](#alphaoptions))
+
+
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `CacheLimit` | _int_ | It defines capacity of keeping providers in an in-memory cache |
+| `CacheDuration` | _int_ | The time.duration in seconds after which the providers in in-memory cache will expire |
 
 ### ProviderLoader
 

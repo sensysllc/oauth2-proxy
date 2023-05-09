@@ -201,8 +201,10 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 		return nil, fmt.Errorf("unable to create tenant loader: %w", err)
 	}
 
+	providerLoaderWithCache := middleware.NewProviderLoaderDecorator(providerLoader, opts.ProviderCache)
+
 	tenantmatcherChain := buildTenantMatcherChain(opts, tenantmatcher)
-	providerLoaderChain := buildProviderLoaderChain(opts, providerLoader)
+	providerLoaderChain := buildProviderLoaderChain(opts, providerLoaderWithCache)
 
 	preAuthChain, err := buildPreAuthChain(opts, sessionStore)
 	if err != nil {

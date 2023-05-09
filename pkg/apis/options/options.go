@@ -44,6 +44,7 @@ type Options struct {
 
 	ProviderLoader ProviderLoader `cfg:",internal"`
 	TenantMatcher  TenantMatcher  `cfg:",internal"`
+	ProviderCache  ProviderCache  `cfg:",internal"`
 
 	UpstreamServers UpstreamConfig `cfg:",internal"`
 
