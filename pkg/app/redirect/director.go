@@ -66,7 +66,7 @@ func (a *appDirector) GetRedirect(req *http.Request) (string, error) {
 	} {
 		redirect := rdGetter(req)
 		// Call `p.IsValidRedirect` again here a final time to be safe
-		if redirect != "" { // && a.validator.IsValidRedirect(redirect) {
+		if redirect != "" && a.validator.IsValidRedirect(redirect) {
 			return redirect, nil
 		}
 	}

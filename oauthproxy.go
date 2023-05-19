@@ -216,7 +216,7 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 	}
 
 	//DODO: implement multitenancy
-	redirectValidator := redirect.NewValidator(opts.WhitelistDomains)
+	redirectValidator := redirect.NewNoopValidator()
 	appDirector := redirect.NewAppDirector(redirect.AppDirectorOpts{
 		ProxyPrefix: opts.ProxyPrefix,
 		Validator:   redirectValidator,
