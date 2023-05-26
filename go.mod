@@ -33,6 +33,7 @@ require (
 	github.com/spf13/viper v1.6.3
 	github.com/stretchr/testify v1.8.1
 	github.com/tidwall/gjson v1.14.4
+	github.com/urfave/negroni v1.0.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	golang.org/x/crypto v0.7.0
 	golang.org/x/exp v0.0.0-20230307190834-24139beb5833

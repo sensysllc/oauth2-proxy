@@ -2,10 +2,13 @@ package middleware
 
 import (
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/justinas/alice"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/urfave/negroni"
 )
 
 // DefaultMetricsHandler is the default http.Handler for serving metrics from
@@ -36,87 +39,97 @@ func NewRequestMetricsWithDefaultRegistry() alice.Constructor {
 // requests to the provided prometheus.Registerer
 func NewRequestMetrics(registerer prometheus.Registerer) alice.Constructor {
 	return func(next http.Handler) http.Handler {
-		// Counter for all requests
-		// This is bucketed based on the response code we set
-		counterHandler := func(next http.Handler) http.Handler {
-			return promhttp.InstrumentHandlerCounter(registerRequestsCounter(registerer), next)
-		}
+		return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 
-		// Gauge to all requests currently being handled
-		inFlightHandler := func(next http.Handler) http.Handler {
-			return promhttp.InstrumentHandlerInFlight(registerInflightRequestsGauge(registerer), next)
-		}
+			m := metrics{}
+			start := time.Now()
+			tenantID := getTenantIDFromRequest(req)
+			lrw := negroni.NewResponseWriter(rw)
+			tc := registerRequestsCounter(registerer, &m)
+			tg := registerInflightRequestsGauge(registerer, &m)
+			th := registerRequestsLatencyHistogram(registerer, &m)
+			tg.With(prometheus.Labels{"tenantid": tenantID}).Inc()
+			defer tg.With(prometheus.Labels{"tenantid": tenantID}).Dec()
 
-		// The latency of all requests bucketed by HTTP method
-		durationHandler := func(next http.Handler) http.Handler {
-			return promhttp.InstrumentHandlerDuration(registerRequestsLatencyHistogram(registerer), next)
-		}
-
-		return alice.New(counterHandler, inFlightHandler, durationHandler).Then(next)
+			next.ServeHTTP(lrw, req)
+			statusCode := lrw.Status()
+			duration := time.Since(start)
+			th.With(prometheus.Labels{"method": req.Method, "tenantid": tenantID}).Observe(duration.Seconds())
+			tc.With(prometheus.Labels{"code": strconv.Itoa(statusCode), "tenantid": tenantID}).Inc()
+		})
 	}
 }
 
-// registerRequestsCounter registers the 'oauth2_proxy_requests_total' metric
-// This keeps a tally of all received requests bucket by their HTTP response
-// status code
-func registerRequestsCounter(registerer prometheus.Registerer) *prometheus.CounterVec {
-	counter := prometheus.NewCounterVec(
+func registerRequestsCounter(reg prometheus.Registerer, m *metrics) *prometheus.CounterVec {
+	m.tenantRequests = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "oauth2_proxy_requests_total",
 			Help: "Total number of requests by HTTP status code.",
 		},
-		[]string{"code"},
+		[]string{"code", "tenantid"},
 	)
 
-	if err := registerer.Register(counter); err != nil {
+	if err := reg.Register(m.tenantRequests); err != nil {
 		if are, ok := err.(prometheus.AlreadyRegisteredError); ok {
-			counter = are.ExistingCollector.(*prometheus.CounterVec)
+			m.tenantRequests = are.ExistingCollector.(*prometheus.CounterVec)
 		} else {
 			panic(err)
 		}
 	}
-
-	return counter
+	return m.tenantRequests
 }
 
 // registerInflightRequestsGauge registers 'oauth2_proxy_requests_in_flight'
 // This only keeps the count of currently in progress HTTP requests
-func registerInflightRequestsGauge(registerer prometheus.Registerer) prometheus.Gauge {
-	gauge := prometheus.NewGauge(prometheus.GaugeOpts{
+func registerInflightRequestsGauge(registerer prometheus.Registerer, m *metrics) *prometheus.GaugeVec {
+	m.tenantGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "oauth2_proxy_requests_in_flight",
 		Help: "Current number of requests being served.",
-	})
+	},
+		[]string{"tenantid"},
+	)
 
-	if err := registerer.Register(gauge); err != nil {
+	if err := registerer.Register(m.tenantGauge); err != nil {
 		if are, ok := err.(prometheus.AlreadyRegisteredError); ok {
-			gauge = are.ExistingCollector.(prometheus.Gauge)
+			m.tenantGauge = are.ExistingCollector.(*prometheus.GaugeVec)
 		} else {
 			panic(err)
 		}
 	}
 
-	return gauge
+	return m.tenantGauge
 }
 
 // registerRequestsLatencyHistogram registers 'oauth2_proxy_response_duration_seconds'
 // This keeps tally of the requests bucketed by the time taken to process the request
-func registerRequestsLatencyHistogram(registerer prometheus.Registerer) *prometheus.HistogramVec {
-	histogram := prometheus.NewHistogramVec(
+func registerRequestsLatencyHistogram(registerer prometheus.Registerer, m *metrics) *prometheus.HistogramVec {
+	m.tenantHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "oauth2_proxy_response_duration_seconds",
 			Help:    "A histogram of request latencies.",
 			Buckets: prometheus.DefBuckets,
 		},
-		[]string{"method"},
+		[]string{"method", "tenantid"},
 	)
 
-	if err := registerer.Register(histogram); err != nil {
+	if err := registerer.Register(m.tenantHistogram); err != nil {
 		if are, ok := err.(prometheus.AlreadyRegisteredError); ok {
-			histogram = are.ExistingCollector.(*prometheus.HistogramVec)
+			m.tenantHistogram = are.ExistingCollector.(*prometheus.HistogramVec)
 		} else {
 			panic(err)
 		}
 	}
 
-	return histogram
+	return m.tenantHistogram
+}
+
+type metrics struct {
+	tenantRequests  *prometheus.CounterVec
+	tenantHistogram *prometheus.HistogramVec
+	tenantGauge     *prometheus.GaugeVec
+}
+
+func getTenantIDFromRequest(r *http.Request) string {
+	query := r.URL.Query().Get("tenant-id")
+	return query
 }
