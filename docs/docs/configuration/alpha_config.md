@@ -481,8 +481,8 @@ Provider holds all configuration for a single provider
 
 | Field | Type | Description |
 | ----- | ---- | ----------- |
-| `CacheLimit` | _int_ | It defines capacity of keeping providers in an in-memory cache |
-| `CacheDuration` | _int_ | The time.duration in seconds after which the providers in in-memory cache will expire |
+| `CacheLimit` | _int_ | It specifies the maximum number of items that the cache can hold. |
+| `CacheDuration` | _int_ | It defines the number of seconds after which the providers in in-memory cache will expire |
 
 ### ProviderLoader
 

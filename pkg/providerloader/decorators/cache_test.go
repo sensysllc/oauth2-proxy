@@ -1,4 +1,4 @@
-package middleware
+package decorators
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func Test_Load(t *testing.T) {
 		Type: "keycloak",
 	})
 
-	pld := NewProviderLoaderDecorator(l, options.ProviderCache{
+	c := WithCache(l, options.ProviderCache{
 		CacheDuration: 20,
 		CacheLimit:    10,
 	})
@@ -39,14 +39,14 @@ func Test_Load(t *testing.T) {
 		{
 			"no error",
 			"dummy",
-			pld,
+			c,
 			wantProvider,
 			false,
 		},
 		{
 			"with error from loader",
 			"xyz",
-			pld,
+			c,
 			nil,
 			true,
 		},
@@ -55,7 +55,7 @@ func Test_Load(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			gotProvider, err := pld.Load(ctx, tt.tenantid)
+			gotProvider, err := c.Load(ctx, tt.tenantid)
 			if err == nil && !tt.wantErr && !reflect.DeepEqual(gotProvider, wantProvider) {
 				t.Errorf("provider loader decorator  = %v, want %v", gotProvider, wantProvider)
 			} else if err != nil && !tt.wantErr {

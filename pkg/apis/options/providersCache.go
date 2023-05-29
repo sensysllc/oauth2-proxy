@@ -1,9 +1,9 @@
 package options
 
 type ProviderCache struct {
-	// It defines capacity of keeping providers in an in-memory cache
+	// It specifies the maximum number of items that the cache can hold.
 	CacheLimit int
 
-	// The time.duration in seconds after which the providers in in-memory cache will expire
+	// It defines the number of seconds after which the providers in in-memory cache will expire
 	CacheDuration int
 }

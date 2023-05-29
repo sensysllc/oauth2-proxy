@@ -29,6 +29,7 @@ import (
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/encryption"
 	proxyhttp "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/http"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader"
+	providerLoaderDecorator "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader/decorators"
 	providerLoaderUtil "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader/util"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/sessions/decorators"
 	tenantmatcher "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/tenant/matcher"
@@ -201,10 +202,10 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 		return nil, fmt.Errorf("unable to create tenant loader: %w", err)
 	}
 
-	providerLoaderWithCache := middleware.NewProviderLoaderDecorator(providerLoader, opts.ProviderCache)
+	providerLoader = providerLoaderDecorator.WithCache(providerLoader, opts.ProviderCache)
 
 	tenantmatcherChain := buildTenantMatcherChain(opts, tenantmatcher)
-	providerLoaderChain := buildProviderLoaderChain(opts, providerLoaderWithCache)
+	providerLoaderChain := buildProviderLoaderChain(opts, providerLoader)
 
 	preAuthChain, err := buildPreAuthChain(opts, sessionStore)
 	if err != nil {
