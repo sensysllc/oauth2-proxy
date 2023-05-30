@@ -319,10 +319,10 @@ func (p *OAuthProxy) buildServeMux(proxyPrefix string) {
 	// Otherwise something like /%2F/ would be redirected to / here already.
 	r := mux.NewRouter().UseEncodedPath()
 	// Everything served by the router must go through the preAuthChain first.
-	r.Use(p.preAuthChain.Then)
 
 	r.Use(p.tenantMatcherChain.Then)
 	r.Use(p.providerLoaderChain.Then)
+	r.Use(p.preAuthChain.Then)
 
 	// Register the robots path writer
 	r.Path(robotsPath).HandlerFunc(p.pageWriter.WriteRobotsTxt)

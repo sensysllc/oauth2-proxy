@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/justinas/alice"
+	tenantutils "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/tenant/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/urfave/negroni"
@@ -38,26 +39,58 @@ func NewRequestMetricsWithDefaultRegistry() alice.Constructor {
 // NewRequestMetrics returns a middleware that will record metrics for HTTP
 // requests to the provided prometheus.Registerer
 func NewRequestMetrics(registerer prometheus.Registerer) alice.Constructor {
+	m := metrics{}
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		// Counter for all requests
+		// This is bucketed based on the response code we set
+		counterHandler := func(next http.Handler) http.Handler {
+			return metricsCounterHandler(registerRequestsCounter(registerer, &m), next)
+		}
 
-			m := metrics{}
-			start := time.Now()
-			tenantID := getTenantIDFromRequest(req)
-			lrw := negroni.NewResponseWriter(rw)
-			tc := registerRequestsCounter(registerer, &m)
-			tg := registerInflightRequestsGauge(registerer, &m)
-			th := registerRequestsLatencyHistogram(registerer, &m)
-			tg.With(prometheus.Labels{"tenantid": tenantID}).Inc()
-			defer tg.With(prometheus.Labels{"tenantid": tenantID}).Dec()
+		// Gauge to all requests currently being handled
+		inFlightHandler := func(next http.Handler) http.Handler {
+			return metricsInFlightHandler(registerInflightRequestsGauge(registerer, &m), next)
+		}
 
-			next.ServeHTTP(lrw, req)
-			statusCode := lrw.Status()
-			duration := time.Since(start)
-			th.With(prometheus.Labels{"method": req.Method, "tenantid": tenantID}).Observe(duration.Seconds())
-			tc.With(prometheus.Labels{"code": strconv.Itoa(statusCode), "tenantid": tenantID}).Inc()
-		})
+		// The latency of all requests bucketed by HTTP method
+		durationHandler := func(next http.Handler) http.Handler {
+			return metricsHandlerDuration(registerRequestsLatencyHistogram(registerer, &m), next)
+		}
+
+		return alice.New(counterHandler, inFlightHandler, durationHandler).Then(next)
 	}
+}
+
+func metricsCounterHandler(counter *prometheus.CounterVec, next http.Handler) http.HandlerFunc {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		lrw := negroni.NewResponseWriter(rw)
+		next.ServeHTTP(lrw, req)
+		statusCode := lrw.Status()
+		tid := tenantutils.FromContext(req.Context())
+
+		counter.With(prometheus.Labels{"code": strconv.Itoa(statusCode), "tenantid": tid}).Inc()
+	})
+}
+
+func metricsInFlightHandler(g *prometheus.GaugeVec, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		tid := tenantutils.FromContext(req.Context())
+		g.With(prometheus.Labels{"tenantid": tid}).Inc()
+		defer g.With(prometheus.Labels{"tenantid": tid}).Dec()
+
+		next.ServeHTTP(rw, req)
+	})
+
+}
+
+func metricsHandlerDuration(obs prometheus.ObserverVec, next http.Handler) http.HandlerFunc {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(rw, req)
+		duration := time.Since(start)
+		tid := tenantutils.FromContext(req.Context())
+		obs.With(prometheus.Labels{"method": req.Method, "tenantid": tid}).Observe(duration.Seconds())
+	})
 }
 
 func registerRequestsCounter(reg prometheus.Registerer, m *metrics) *prometheus.CounterVec {
@@ -127,9 +160,4 @@ type metrics struct {
 	tenantRequests  *prometheus.CounterVec
 	tenantHistogram *prometheus.HistogramVec
 	tenantGauge     *prometheus.GaugeVec
-}
-
-func getTenantIDFromRequest(r *http.Request) string {
-	query := r.URL.Query().Get("tenant-id")
-	return query
 }
