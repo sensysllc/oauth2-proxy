@@ -29,13 +29,12 @@ import (
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/cookies"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/encryption"
 	proxyhttp "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/http"
-	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader"
-	providerLoaderUtil "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/providerloader/util"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/sessions/decorators"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/util"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/version"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/providers/loader"
 	providermatcher "github.com/oauth2-proxy/oauth2-proxy/v7/providers/matcher"
-	providerutils "github.com/oauth2-proxy/oauth2-proxy/v7/providers/utils"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/providers/utils"
 
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/ip"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/logger"
@@ -118,7 +117,7 @@ type OAuthProxy struct {
 	appDirector          redirect.AppDirector
 
 	providerMatcher *providermatcher.Matcher
-	providerLoader  providerloader.Loader
+	providerLoader  loader.Loader
 	encodeState     bool
 }
 
@@ -203,7 +202,7 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 		return nil, fmt.Errorf("unable to create provider matcher: %w", err)
 	}
 
-	providerLoader, err := providerloader.NewLoader(opts)
+	providerLoader, err := loader.NewLoader(opts)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create provider loader: %w", err)
 	}
@@ -417,7 +416,7 @@ func buildProviderMatcherChain(opts *options.Options, providerMatcher *providerm
 	return alice.New(middleware.NewProviderMatcher(providerMatcher))
 }
 
-func buildProviderLoaderChain(opts *options.Options, providerLoader providerloader.Loader) alice.Chain {
+func buildProviderLoaderChain(opts *options.Options, providerLoader loader.Loader) alice.Chain {
 	return alice.New(middleware.NewProviderLoader(providerLoader))
 }
 
@@ -427,7 +426,7 @@ func buildSessionChain(opts *options.Options, sessionStore sessionsapi.SessionSt
 	if opts.SkipJwtBearerTokens {
 		sessionLoaders := []middlewareapi.TokenToSessionFunc{
 			func(ctx context.Context, token string) (*sessionsapi.SessionState, error) {
-				provider := providerLoaderUtil.FromContext(ctx)
+				provider := utils.ProviderFromContext(ctx)
 				if provider == nil {
 					return nil, fmt.Errorf("provider not found")
 				}
@@ -584,9 +583,9 @@ func (p *OAuthProxy) ErrorPage(rw http.ResponseWriter, req *http.Request, code i
 		redirectURL = "/"
 	}
 
-	tntID := providerutils.FromContext(req.Context())
+	providerID := utils.ProviderIDFromContext(req.Context())
 
-	redirectURL = providerutils.InjectProviderID(tntID, redirectURL)
+	redirectURL = utils.InjectProviderID(providerID, redirectURL)
 
 	scope := middlewareapi.GetRequestScope(req)
 	p.pageWriter.WriteErrorPage(req.Context(), rw, pagewriter.ErrorPageOpts{
@@ -661,7 +660,7 @@ func (p *OAuthProxy) isTrustedIP(req *http.Request) bool {
 
 // SignInPage writes the sign in template to the response
 func (p *OAuthProxy) SignInPage(rw http.ResponseWriter, req *http.Request, code int) {
-	provider := providerLoaderUtil.FromContext(req.Context())
+	provider := utils.ProviderFromContext(req.Context())
 	if provider == nil {
 		logger.Println("unable to load provider from context")
 		p.ErrorPage(rw, req, http.StatusUnauthorized, "provider not authourized")
@@ -719,8 +718,8 @@ func (p *OAuthProxy) SignIn(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	tntID := providerutils.FromContext(req.Context())
-	redirect = providerutils.InjectProviderID(tntID, redirect)
+	providerID := utils.ProviderIDFromContext(req.Context())
+	redirect = utils.InjectProviderID(providerID, redirect)
 
 	user, ok, statusCode := p.ManualSignIn(req)
 	if ok {
@@ -744,7 +743,7 @@ func (p *OAuthProxy) SignIn(rw http.ResponseWriter, req *http.Request) {
 
 // UserInfo endpoint outputs session email and preferred username in JSON format
 func (p *OAuthProxy) UserInfo(rw http.ResponseWriter, req *http.Request) {
-	provider := providerLoaderUtil.FromContext(req.Context())
+	provider := utils.ProviderFromContext(req.Context())
 	if provider == nil {
 		http.Error(rw, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
@@ -793,8 +792,8 @@ func (p *OAuthProxy) SignOut(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	tntID := providerutils.FromContext(req.Context())
-	redirect = providerutils.InjectProviderID(tntID, redirect)
+	providerID := utils.ProviderIDFromContext(req.Context())
+	redirect = utils.InjectProviderID(providerID, redirect)
 
 	err = p.ClearSessionCookie(rw, req)
 	if err != nil {
@@ -809,7 +808,14 @@ func (p *OAuthProxy) SignOut(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (p *OAuthProxy) backendLogout(rw http.ResponseWriter, req *http.Request) {
-	session, err := p.getAuthenticatedSession(rw, req)
+
+	provider := utils.ProviderFromContext(req.Context())
+	if provider == nil {
+		logger.Errorf("no provider found in request context")
+		return
+	}
+
+	session, err := p.getAuthenticatedSession(rw, req, provider)
 	if err != nil {
 		logger.Errorf("error getting authenticated session during backend logout: %v", err)
 		return
@@ -841,7 +847,7 @@ func (p *OAuthProxy) backendLogout(rw http.ResponseWriter, req *http.Request) {
 
 // OAuthStart starts the OAuth2 authentication flow
 func (p *OAuthProxy) OAuthStart(rw http.ResponseWriter, req *http.Request) {
-	provider := providerLoaderUtil.FromContext(req.Context())
+	provider := utils.ProviderFromContext(req.Context())
 	if provider == nil {
 		http.Error(rw, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
@@ -851,7 +857,7 @@ func (p *OAuthProxy) OAuthStart(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (p *OAuthProxy) doOAuthStart(rw http.ResponseWriter, req *http.Request, provider providers.Provider, overrides url.Values) {
-	tntID := providerutils.FromContext(req.Context())
+	providerID := utils.ProviderIDFromContext(req.Context())
 
 	extraParams := provider.Data().LoginURLParams(overrides)
 	prepareNoCache(rw)
@@ -897,7 +903,7 @@ func (p *OAuthProxy) doOAuthStart(rw http.ResponseWriter, req *http.Request, pro
 	callbackRedirect := p.getOAuthRedirectURI(req)
 	loginURL := provider.GetLoginURL(
 		callbackRedirect,
-		encodeState(csrf.HashOAuthState(), appRedirect, tntID),
+		encodeState(csrf.HashOAuthState(), appRedirect, providerID, p.encodeState),
 		csrf.HashOIDCNonce(),
 		extraParams,
 	)
@@ -916,7 +922,7 @@ func (p *OAuthProxy) doOAuthStart(rw http.ResponseWriter, req *http.Request, pro
 func (p *OAuthProxy) OAuthCallback(rw http.ResponseWriter, req *http.Request) {
 	remoteAddr := ip.GetClientString(p.realClientIPParser, req, true)
 
-	tntID := providerutils.FromContext(req.Context())
+	providerID := utils.ProviderIDFromContext(req.Context())
 
 	// finish the oauth cycle
 	err := req.ParseForm()
@@ -926,16 +932,9 @@ func (p *OAuthProxy) OAuthCallback(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	nonce, appRedirect, _, err := decodeState(req)
-	if err != nil {
-		logger.Errorf("Error while parsing OAuth2 state: %v", err)
-		p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	provider := providerLoaderUtil.FromContext(req.Context())
+	provider := utils.ProviderFromContext(req.Context())
 	if provider == nil {
-		logger.Errorf("No provider found for provider 'id=%s'", tntID)
+		logger.Errorf("No provider found for provider 'id=%s'", providerID)
 		p.ErrorPage(rw, req, http.StatusForbidden, "no provider found")
 		return
 	}
@@ -1002,7 +1001,7 @@ func (p *OAuthProxy) OAuthCallback(rw http.ResponseWriter, req *http.Request) {
 		appRedirect = "/"
 	}
 
-	appRedirect = providerutils.InjectProviderID(tntID, appRedirect)
+	appRedirect = utils.InjectProviderID(providerID, appRedirect)
 
 	// set cookie, or deny
 	authorized, err := provider.Authorize(req.Context(), session)
@@ -1064,7 +1063,7 @@ func (p *OAuthProxy) enrichSessionState(ctx context.Context, s *sessionsapi.Sess
 // AuthOnly checks whether the user is currently logged in (both authentication
 // and optional authorization).
 func (p *OAuthProxy) AuthOnly(rw http.ResponseWriter, req *http.Request) {
-	provider := providerLoaderUtil.FromContext(req.Context())
+	provider := utils.ProviderFromContext(req.Context())
 	if provider == nil {
 		http.Error(rw, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
@@ -1093,7 +1092,7 @@ func (p *OAuthProxy) AuthOnly(rw http.ResponseWriter, req *http.Request) {
 // Proxy proxies the user request if the user is authenticated else it prompts
 // them to authenticate
 func (p *OAuthProxy) Proxy(rw http.ResponseWriter, req *http.Request) {
-	provider := providerLoaderUtil.FromContext(req.Context())
+	provider := utils.ProviderFromContext(req.Context())
 	if provider == nil {
 		http.Error(rw, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
@@ -1167,7 +1166,7 @@ func (p *OAuthProxy) getOAuthRedirectURI(req *http.Request) string {
 	// if `p.redirectURL` already has a host, return it
 	if p.redirectURL.Host != "" {
 		rdStr := p.redirectURL.String()
-		rdStr = providerutils.InjectProviderID(providerutils.FromContext(req.Context()), rdStr)
+		rdStr = utils.InjectProviderID(utils.ProviderIDFromContext(req.Context()), rdStr)
 		return rdStr
 	}
 
@@ -1188,7 +1187,7 @@ func (p *OAuthProxy) getOAuthRedirectURI(req *http.Request) string {
 	}
 
 	rdStr := rd.String()
-	rdStr = providerutils.InjectProviderID(providerutils.FromContext(req.Context()), rdStr)
+	rdStr = utils.InjectProviderID(utils.ProviderIDFromContext(req.Context()), rdStr)
 	return rdStr
 }
 
