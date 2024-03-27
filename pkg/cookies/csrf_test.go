@@ -27,20 +27,24 @@ var _ = Describe("CSRF Cookie Tests", func() {
 
 	BeforeEach(func() {
 		cookieOpts = &options.Cookie{
-			NamePrefix:     cookieName,
-			Secret:         cookieSecret,
-			Domains:        []string{cookieDomain},
-			Path:           cookiePath,
-			Expire:         time.Hour,
-			Secure:         true,
-			HTTPOnly:       true,
-			CSRFPerRequest: false,
-			CSRFExpire:     time.Hour,
+			NamePrefix:      cookieName,
+			Secret:          cookieSecret,
+			DomainTemplates: []string{cookieDomainTemplate},
+			Path:            cookiePath,
+			Expire:          time.Hour,
+			Secure:          true,
+			HTTPOnly:        true,
+			CSRFPerRequest:  false,
+			CSRFExpire:      time.Hour,
 		}
 
 		var err error
 		ctx := context.Background()
 		ctx = utils.AppendProviderIDToContext(ctx, "dummy")
+
+		err = cookieOpts.Init()
+		Expect(err).ToNot(HaveOccurred())
+
 		publicCSRF, err = NewCSRF(ctx, cookieOpts, "verifier")
 		Expect(err).ToNot(HaveOccurred())
 
@@ -104,11 +108,11 @@ var _ = Describe("CSRF Cookie Tests", func() {
 			req = &http.Request{
 				Method: http.MethodGet,
 				Proto:  "HTTP/1.1",
-				Host:   cookieDomain,
+				Host:   cookieDomainTemplate,
 
 				URL: &url.URL{
 					Scheme: "https",
-					Host:   cookieDomain,
+					Host:   cookieDomainTemplate,
 					Path:   cookiePath,
 				},
 			}
@@ -199,11 +203,11 @@ var _ = Describe("CSRF Cookie Tests", func() {
 			req = &http.Request{
 				Method: http.MethodGet,
 				Proto:  "HTTP/1.1",
-				Host:   cookieDomain,
+				Host:   cookieDomainTemplate,
 
 				URL: &url.URL{
 					Scheme: "https",
-					Host:   cookieDomain,
+					Host:   cookieDomainTemplate,
 					Path:   cookiePath,
 				},
 				Header: make(http.Header)}
@@ -227,7 +231,7 @@ var _ = Describe("CSRF Cookie Tests", func() {
 					fmt.Sprintf(
 						"; Path=%s; Domain=%s; Expires=%s; HttpOnly; Secure",
 						cookiePath,
-						cookieDomain,
+						cookieDomainTemplate,
 						testCookieExpires(testNow.Add(cookieOpts.CSRFExpire)),
 					),
 				))
@@ -305,7 +309,7 @@ var _ = Describe("CSRF Cookie Tests", func() {
 						"%s=; Path=%s; Domain=%s; Expires=%s; HttpOnly; Secure",
 						privateCSRF.cookieName(ctx),
 						cookiePath,
-						cookieDomain,
+						cookieDomainTemplate,
 						testCookieExpires(testNow.Add(time.Hour*-1)),
 					),
 				))
