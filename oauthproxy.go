@@ -89,20 +89,22 @@ type OAuthProxy struct {
 
 	SignInPath string
 
-	allowedRoutes       []allowedRoute
-	apiRoutes           []apiRoute
-	redirectURL         *url.URL // the url to receive requests at
-	whitelistDomains    []string
-	sessionStore        sessionsapi.SessionStore
-	ProxyPrefix         string
-	basicAuthValidator  basic.Validator
-	basicAuthGroups     []string
-	SkipProviderButton  bool
-	skipAuthPreflight   bool
-	skipJwtBearerTokens bool
-	forceJSONErrors     bool
-	realClientIPParser  ipapi.RealClientIPParser
-	trustedIPs          *ip.NetSet
+	allowedRoutes        []allowedRoute
+	apiRoutes            []apiRoute
+	redirectURL          *url.URL // the url to receive requests at
+	relativeRedirectURL  bool
+	whitelistDomains     []string
+	sessionStore         sessionsapi.SessionStore
+	ProxyPrefix          string
+	basicAuthValidator   basic.Validator
+	basicAuthGroups      []string
+	SkipProviderButton   bool
+	skipAuthPreflight    bool
+	skipJwtBearerTokens  bool
+	forceJSONErrors      bool
+	allowQuerySemicolons bool
+	realClientIPParser   ipapi.RealClientIPParser
+	trustedIPs           *ip.NetSet
 
 	providerMatcherChain alice.Chain // middleware that loads providerId from the http request and then stores it in the context
 	providerLoaderChain  alice.Chain // middleware that loads provider from the hproviderLoader and then stores it in the context
@@ -233,18 +235,20 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 
 		SignInPath: fmt.Sprintf("%s/sign_in", opts.ProxyPrefix),
 
-		ProxyPrefix:         opts.ProxyPrefix,
-		sessionStore:        sessionStore,
-		redirectURL:         redirectURL,
-		apiRoutes:           apiRoutes,
-		allowedRoutes:       allowedRoutes,
-		whitelistDomains:    opts.WhitelistDomains,
-		skipAuthPreflight:   opts.SkipAuthPreflight,
-		skipJwtBearerTokens: opts.SkipJwtBearerTokens,
-		realClientIPParser:  opts.GetRealClientIPParser(),
-		SkipProviderButton:  opts.SkipProviderButton,
-		forceJSONErrors:     opts.ForceJSONErrors,
-		trustedIPs:          trustedIPs,
+		ProxyPrefix:          opts.ProxyPrefix,
+		sessionStore:         sessionStore,
+		redirectURL:          redirectURL,
+		relativeRedirectURL:  opts.RelativeRedirectURL,
+		apiRoutes:            apiRoutes,
+		allowedRoutes:        allowedRoutes,
+		whitelistDomains:     opts.WhitelistDomains,
+		skipAuthPreflight:    opts.SkipAuthPreflight,
+		skipJwtBearerTokens:  opts.SkipJwtBearerTokens,
+		realClientIPParser:   opts.GetRealClientIPParser(),
+		SkipProviderButton:   opts.SkipProviderButton,
+		forceJSONErrors:      opts.ForceJSONErrors,
+		allowQuerySemicolons: opts.AllowQuerySemicolons,
+		trustedIPs:           trustedIPs,
 
 		providerMatcherChain: providermatcherChain,
 		providerLoaderChain:  providerLoaderChain,
@@ -340,7 +344,7 @@ func (p *OAuthProxy) buildServeMux(proxyPrefix string) {
 
 	// The authonly path should be registered separately to prevent it from getting no-cache headers.
 	// We do this to allow users to have a short cache (via nginx) of the response to reduce the
-	// likelihood of multiple reuests trying to referesh sessions simultaneously.
+	// likelihood of multiple requests trying to refresh sessions simultaneously.
 	r.Path(proxyPrefix + authOnlyPath).Handler(p.sessionChain.ThenFunc(p.AuthOnly))
 	// This will register all of the paths under the proxy prefix, except the auth only path so that no cache headers
 	// are not applied.
@@ -356,7 +360,6 @@ func (p *OAuthProxy) buildProxySubrouter(s *mux.Router) {
 	s.Use(prepareNoCacheMiddleware)
 
 	s.Path(signInPath).HandlerFunc(p.SignIn)
-	s.Path(signOutPath).HandlerFunc(p.SignOut)
 	s.Path(oauthStartPath).HandlerFunc(p.OAuthStart)
 	s.Path(oauthCallbackPath).HandlerFunc(p.OAuthCallback)
 
@@ -863,7 +866,7 @@ func (p *OAuthProxy) doOAuthStart(rw http.ResponseWriter, req *http.Request, pro
 	)
 	if provider.Data().CodeChallengeMethod != "" {
 		codeChallengeMethod = provider.Data().CodeChallengeMethod
-		codeVerifier, err = encryption.GenerateRandomASCIIString(96)
+		codeVerifier, err = encryption.GenerateCodeVerifierString(96)
 		if err != nil {
 			logger.Errorf("Unable to build random ASCII string for code verifier: %v", err)
 			p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
@@ -943,7 +946,7 @@ func (p *OAuthProxy) OAuthCallback(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	nonce, appRedirect, err := decodeState(req.Form.Get("state"), p.encodeState)
+	nonce, appRedirect, _, err := decodeState(req.Form.Get("state"), p.encodeState)
 	if err != nil {
 		logger.Errorf("Error while parsing OAuth2 state: %v", err)
 		p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
@@ -951,7 +954,7 @@ func (p *OAuthProxy) OAuthCallback(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	// calculate the cookie name
-	cookieName := cookies.GenerateCookieName(p.CookieOptions, nonce)
+	cookieName := cookies.GenerateCookieName(req, p.CookieOptions, nonce)
 	// Try to find the CSRF cookie and decode it
 	csrf, err := cookies.LoadCSRFCookie(req, cookieName, p.CookieOptions)
 	if err != nil {
@@ -1159,7 +1162,7 @@ func prepareNoCacheMiddleware(next http.Handler) http.Handler {
 // This is usually the OAuthProxy callback URL.
 func (p *OAuthProxy) getOAuthRedirectURI(req *http.Request) string {
 	// if `p.redirectURL` already has a host, return it
-	if p.redirectURL.Host != "" {
+	if p.relativeRedirectURL || p.redirectURL.Host != "" {
 		rdStr := p.redirectURL.String()
 		rdStr = utils.InjectProviderID(utils.ProviderIDFromContext(req.Context()), rdStr)
 		return rdStr
@@ -1339,7 +1342,7 @@ func encodeState(nonce, redirect, providerID string, encode bool) string {
 	if encode {
 		return base64.RawURLEncoding.EncodeToString([]byte(rawString))
 	}
-	return base64.StdEncoding.EncodeToString(js)
+	return rawString
 }
 
 // decodeState splits the reflected OAuth state response back into

@@ -460,7 +460,7 @@ func (patTest *PassAccessTokenTest) getCallbackEndpoint() (httpCode int, cookie 
 		http.MethodGet,
 		fmt.Sprintf(
 			"/oauth2/callback?code=callback_code&state=%s",
-			encodeState(csrf.HashOAuthState(), "%2F", false),
+			encodeState(csrf.HashOAuthState(), "%2F", "", false),
 		),
 		strings.NewReader(""),
 	)
@@ -3446,7 +3446,9 @@ func Test_t(t *testing.T) {
 
 	s := encodeState(nonce, redirect, providerID, true)
 
-	t.Error(s)
+	if s == "" {
+		t.Errorf("encodeState returned an empty string")
+	}
 }
 
 func TestStateEncodesCorrectly(t *testing.T) {

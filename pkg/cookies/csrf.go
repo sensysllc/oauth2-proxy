@@ -90,27 +90,22 @@ func LoadCSRFCookie(req *http.Request, cookieName string, opts *options.Cookie) 
 			continue
 		}
 
+		// matching provider id from request and in cookie
+		providerIDFromRequest := utils.ProviderIDFromContext(req.Context())
+
+		if providerIDFromRequest != csrf.ProviderID {
+			return nil, errors.New("providerID in request does not match providerID in csrf cookie")
+		}
+
 		return csrf, nil
 	}
 
-	crf, err := decodeCSRFCookie(cookie, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	// matching provider id from request and in cookie
-	providerIDFromRequest := utils.ProviderIDFromContext(req.Context())
-
-	if providerIDFromRequest != crf.ProviderID {
-		return nil, errors.New("providerID in request does not match providerID in csrf cookie")
-	}
-
-	return crf, nil
+	return nil, fmt.Errorf("CSRF cookie with name '%v' was not found", cookieName)
 }
 
 // GenerateCookieName in case cookie options state that CSRF cookie has fixed name then set fixed name, otherwise
 // build name based on the state
-func GenerateCookieName(opts *options.Cookie, state string) string {
+func GenerateCookieName(req *http.Request, opts *options.Cookie, state string) string {
 	stateSubstring := ""
 	if opts.CSRFPerRequest {
 		// csrfCookieName will include a substring of the state to enable multiple csrf cookies

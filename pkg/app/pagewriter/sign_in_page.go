@@ -59,8 +59,6 @@ func (s *signInPageWriter) WriteSignInPage(rw http.ResponseWriter, req *http.Req
 		fmt.Println("NO PROVIDER FOUND")
 	}
 
-	// We allow unescaped template.HTML since it is user configured options
-	/* #nosec G203 */
 	t := struct {
 		ProviderIDInputName string
 		ProviderID          string

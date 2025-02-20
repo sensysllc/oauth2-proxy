@@ -203,7 +203,7 @@ func TestPostgresStore_Get(t *testing.T) {
 
 		rows := sqlmock.NewRows([]string{"id", "provider_conf"}).AddRow(test.id, test.providerConf)
 
-		mock.ExpectQuery("SELECT * FROM \"providers\" WHERE \"providers\".\"id\" = $1 ORDER BY \"providers\".\"id\" LIMIT 1").WithArgs(test.id).WillReturnRows(rows).WillReturnError(test.sqlError)
+		mock.ExpectQuery("SELECT * FROM \"providers\" WHERE \"providers\".\"id\" = $1 ORDER BY \"providers\".\"id\" LIMIT $2").WithArgs(test.id, 1).WillReturnRows(rows).WillReturnError(test.sqlError)
 		providerConf, err := postgresStore.Get(context.Background(), test.id)
 
 		if (providerConf != "") && (!reflect.DeepEqual(providerConf, test.providerConf)) {
