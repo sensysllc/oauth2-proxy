@@ -183,8 +183,6 @@ They may change between releases without notice.
 | `server` | _[Server](#server)_ | Server is used to configure the HTTP(S) server for the proxy application.<br/>You may choose to run both HTTP and HTTPS servers simultaneously.<br/>This can be done by setting the BindAddress and the SecureBindAddress simultaneously.<br/>To use the secure server you must configure a TLS certificate and key. |
 | `metricsServer` | _[Server](#server)_ | MetricsServer is used to configure the HTTP(S) server for metrics.<br/>You may choose to run both HTTP and HTTPS servers simultaneously.<br/>This can be done by setting the BindAddress and the SecureBindAddress simultaneously.<br/>To use the secure server you must configure a TLS certificate and key. |
 | `providers` | _[Providers](#providers)_ | Providers is used to configure multiple providers. |
-| `providerLoader` | _[ProviderLoader](#providerloader)_ | ProviderLoader is used to allow multi-provider in oauth2-proxy.<br/>You can choose between single, config and postgres types. |
-| `providerMatcher` | _[ProviderMatcher](#providermatcher)_ | ProviderMatcher is used to configure the provider-id matching rules for extracting provider-id from request<br/>which will then in turn cause providerLoader to load provider identifying from its ID.<br/>The rules define where to look for provider-id in request header, host, query or path or their precedence. |
 
 ### AzureOptions
 
@@ -495,6 +493,7 @@ Provider holds all configuration for a single provider
 | `useSystemTrustStore` | _bool_ | UseSystemTrustStore determines if your custom CA files and the system trust store are used<br/>If set to true, your custom CA files and the system trust store are used otherwise only your custom CA files. |
 | `loginURL` | _string_ | LoginURL is the authentication endpoint |
 | `loginURLParameters` | _[[]LoginURLParameter](#loginurlparameter)_ | LoginURLParameters defines the parameters that can be passed from the start URL to the IdP login URL |
+| `authRequestResponseMode` | _string_ | AuthRequestResponseMode defines the response mode to request during authorization request |
 | `redeemURL` | _string_ | RedeemURL is the token redemption endpoint |
 | `profileURL` | _string_ | ProfileURL is the profile access endpoint |
 | `skipClaimsFromProfileURL` | _bool_ | SkipClaimsFromProfileURL allows to skip request to Profile URL for resolving claims not present in id_token<br/>default set to 'false' |
@@ -532,7 +531,11 @@ and oidc.
 
 (**Appears on:** [AlphaOptions](#alphaoptions))
 
-Providers is a collection of definitions for providers.
+The provider can be selected using the `provider` configuration value, or
+set in the [`providers` array using
+AlphaConfig](https://oauth2-proxy.github.io/oauth2-proxy/configuration/alpha-config#providers).
+However, [**the feature to implement multiple providers is not
+complete**](https://github.com/oauth2-proxy/oauth2-proxy/issues/926).
 
 
 ### Redis
@@ -683,6 +686,7 @@ Requests will be proxied to this upstream if the path matches the request path.
 | `passHostHeader` | _bool_ | PassHostHeader determines whether the request host header should be proxied<br/>to the upstream server.<br/>Defaults to true. |
 | `proxyWebSockets` | _bool_ | ProxyWebSockets enables proxying of websockets to upstream servers<br/>Defaults to true. |
 | `timeout` | _[Duration](#duration)_ | Timeout is the maximum duration the server will wait for a response from the upstream server.<br/>Defaults to 30 seconds. |
+| `disableKeepAlives` | _bool_ | DisableKeepAlives disables HTTP keep-alive connections to the upstream server.<br/>Defaults to false. |
 
 ### UpstreamConfig
 
